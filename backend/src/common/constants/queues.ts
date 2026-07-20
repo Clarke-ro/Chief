@@ -23,6 +23,8 @@ export type SyncJobName =
   | 'sync.calendar'
   | 'sync.email'
   | 'sync.contacts'
+  | 'sync.tasks'
+  | 'sync.messages'
   | 'sync.due-accounts';
 
 export type BriefingJobName = 'briefing.generate' | 'briefing.morning';

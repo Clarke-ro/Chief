@@ -2,6 +2,7 @@ import { Logger, Module, OnModuleInit } from '@nestjs/common';
 import { BullMqRootModule } from '../common/bullmq/bullmq.module';
 import { QueueService } from '../common/bullmq/queue.service';
 import { CommonModule } from '../common/common.module';
+import { SyncCoreModule } from '../sync/sync-core.module';
 import { ActionsProcessor } from './processors/actions.processor';
 import { AiProcessor } from './processors/ai.processor';
 import { AnalyticsProcessor } from './processors/analytics.processor';
@@ -14,7 +15,7 @@ import { SyncProcessor } from './processors/sync.processor';
  * Do not import this into the HTTP AppModule — API should produce, not consume.
  */
 @Module({
-  imports: [CommonModule, BullMqRootModule],
+  imports: [CommonModule, BullMqRootModule, SyncCoreModule],
   providers: [
     SyncProcessor,
     BriefingProcessor,

@@ -9,9 +9,10 @@ import {
   IntegrationProvider,
   type Prisma,
 } from '@prisma/client';
+import { AuditService } from '../../audit/audit.service';
+import { QueueService } from '../../common/bullmq/queue.service';
 import { AppConfigService } from '../../common/config/app-config.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { AuditService } from '../../audit/audit.service';
 import { createOAuthState, createPkcePair } from '../providers/pkce';
 import { ProviderRegistry } from '../providers/provider.registry';
 import { TokenVaultService } from '../tokens/token-vault.service';
@@ -28,6 +29,7 @@ export class OAuthService {
     private readonly stateStore: OAuthStateService,
     private readonly vault: TokenVaultService,
     private readonly audit: AuditService,
+    private readonly queues: QueueService,
   ) {}
 
   buildRedirectUri(provider: IntegrationProvider): string {
@@ -144,6 +146,8 @@ export class OAuthService {
         resource: account.id,
         meta: { provider: input.provider },
       });
+
+      await this.enqueueOnboardingSync(account.workspaceId, account.id);
 
       return {
         redirectUrl: this.successRedirect(
@@ -378,6 +382,32 @@ export class OAuthService {
         `Audit append failed for ${input.action}: ${
           error instanceof Error ? error.message : 'unknown'
         }`,
+      );
+    }
+  }
+
+  /** Kick Google (etc.) mail/calendar pull after a successful connect. */
+  private async enqueueOnboardingSync(
+    workspaceId: string,
+    connectedAccountId: string,
+  ): Promise<void> {
+    try {
+      await this.queues.enqueueSync(
+        'sync.account',
+        {
+          workspaceId,
+          connectedAccountId,
+          reason: 'onboarding',
+        },
+        { jobId: `sync:${connectedAccountId}:account:onboarding` },
+      );
+    } catch (error) {
+      this.logger.warn(
+        {
+          connectedAccountId,
+          err: error instanceof Error ? error.message : String(error),
+        },
+        'Failed to enqueue onboarding sync (connect still succeeded)',
       );
     }
   }

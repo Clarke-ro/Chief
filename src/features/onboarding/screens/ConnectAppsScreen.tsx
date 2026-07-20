@@ -28,6 +28,7 @@ import { ensureActiveWorkspaceId } from '@/services/activeWorkspace';
 import { connectIntegration } from '@/services/integrations/connectIntegration';
 import { onboardingRepository, queryKeys } from '@/services';
 import { integrationsRepository } from '@/services/repositories/integrationsRepository';
+import { useWorkspaceStore } from '@/stores';
 import { radius, spacing } from '@/theme';
 
 const ONBOARDING_APPS = onboardingRepository.listApps();
@@ -97,6 +98,8 @@ export function ConnectAppsScreen() {
       });
       await queryClient.invalidateQueries({ queryKey: queryKeys.integrations(workspaceId) });
       if (result.ok) {
+        // Onboarding sync enqueues on the API; pull brief again shortly after.
+        void useWorkspaceStore.getState().refreshBrief();
         return;
       }
       if (result.reason === 'failed' && result.message) {

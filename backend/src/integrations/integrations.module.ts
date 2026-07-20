@@ -1,5 +1,6 @@
 ﻿import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
+import { BullMqRootModule } from '../common/bullmq/bullmq.module';
 import { MembershipModule } from '../membership/membership.module';
 import { WorkspaceModule } from '../workspace/workspace.module';
 import { IntegrationHealthService } from './health/integration-health.service';
@@ -17,7 +18,7 @@ import { AccessTokenService } from './tokens/access-token.service';
 import { TokenVaultService } from './tokens/token-vault.service';
 
 @Module({
-  imports: [WorkspaceModule, MembershipModule, AuditModule],
+  imports: [WorkspaceModule, MembershipModule, AuditModule, BullMqRootModule],
   controllers: [IntegrationsController],
   providers: [
     GoogleAdapter,

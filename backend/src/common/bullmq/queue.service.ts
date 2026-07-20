@@ -15,7 +15,16 @@ export type SyncAccountJobData = {
   workspaceId: string;
   connectedAccountId: string;
   resource?: 'calendar' | 'email' | 'contacts' | 'tasks' | 'messages';
-  reason?: 'manual' | 'schedule' | 'webhook';
+  reason?:
+    | 'manual'
+    | 'schedule'
+    | 'webhook'
+    | 'onboarding'
+    | 'recovery'
+    | 'historical';
+  historical?: boolean;
+  lookbackDays?: number;
+  lookaheadDays?: number;
 };
 
 @Injectable()
