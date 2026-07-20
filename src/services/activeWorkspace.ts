@@ -1,6 +1,5 @@
 import { DEFAULT_WORKSPACE_ID, type WorkspaceId } from '@/config/workspace';
 import { authClient } from '@/services/auth/authClient';
-import { agentLog } from '@/services/debugAgentLog';
 import { GLOBAL_KEYS } from '@/services/storageKeys';
 import { storage } from '@/services/storage';
 
@@ -32,52 +31,21 @@ export function persistActiveWorkspaceId(id: WorkspaceId): WorkspaceId {
 /** Returns a real backend workspace id, bootstrapping from `/v1/me` when needed. */
 export async function ensureActiveWorkspaceId(): Promise<string> {
   const current = getActiveWorkspaceId();
-  // #region agent log
-  agentLog('A', 'activeWorkspace.ts:ensureActiveWorkspaceId', 'ensure start', {
-    current,
-    isValid: isWorkspaceUuid(current),
-  });
-  // #endregion
   if (isWorkspaceUuid(current)) {
     return current;
   }
 
   const session = await authClient.getSession();
-  // #region agent log
-  agentLog('A', 'activeWorkspace.ts:getSession', 'session check', {
-    hasSession: Boolean(session.data?.session),
-    hasUser: Boolean(session.data?.user),
-    sessionError: session.error?.message ?? null,
-  });
-  // #endregion
   if (!session.data?.session) {
     throw new Error('Not signed in.');
   }
 
-  try {
-    const { authService } = await import('@/services/auth/authService');
-    const me = await authService.bootstrapSession();
-    const workspaceId = me.workspaces[0]?.id;
-    // #region agent log
-    agentLog('C', 'activeWorkspace.ts:bootstrap', 'bootstrap result', {
-      workspaceCount: me.workspaces?.length ?? 0,
-      hasWorkspace: Boolean(workspaceId),
-      workspaceIsValid: workspaceId ? isWorkspaceUuid(workspaceId) : false,
-    });
-    // #endregion
-    if (!workspaceId || !isWorkspaceUuid(workspaceId)) {
-      throw new Error('No workspace is available for this account.');
-    }
-
-    return persistActiveWorkspaceId(workspaceId);
-  } catch (error) {
-    // #region agent log
-    agentLog('B', 'activeWorkspace.ts:bootstrapCatch', 'bootstrap failed', {
-      name: error instanceof Error ? error.name : 'unknown',
-      message: error instanceof Error ? error.message : 'unknown',
-      status: (error as { status?: number })?.status ?? null,
-    });
-    // #endregion
-    throw error;
+  const { authService } = await import('@/services/auth/authService');
+  const me = await authService.bootstrapSession();
+  const workspaceId = me.workspaces[0]?.id;
+  if (!workspaceId || !isWorkspaceUuid(workspaceId)) {
+    throw new Error('No workspace is available for this account.');
   }
+
+  return persistActiveWorkspaceId(workspaceId);
 }

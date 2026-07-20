@@ -19,33 +19,7 @@ function openAuthSessionAsync(url, redirectUrl) {
       resolve(result);
     };
 
-    const dbg = (hypothesisId, location, message, data) => {
-      const payload = {
-        sessionId: 'bf7caf',
-        runId: 'post-fix',
-        hypothesisId,
-        location,
-        message,
-        data,
-        timestamp: Date.now(),
-      };
-      console.warn('[DBG-bf7caf]', JSON.stringify(payload));
-    };
-
     const subscription = Linking.addEventListener('url', ({ url: incoming }) => {
-      // #region agent log
-      dbg('C', 'ExpoWebBrowser.js:url', 'deep link received', {
-        incomingScheme: (() => {
-          try {
-            return new URL(incoming).protocol;
-          } catch {
-            return null;
-          }
-        })(),
-        hasCallback: incoming.includes('integrations/callback'),
-        matchesRedirect: Boolean(redirectBase && incoming.startsWith(redirectBase)),
-      });
-      // #endregion
       if (
         !redirectBase ||
         incoming.startsWith(redirectBase) ||
@@ -61,11 +35,6 @@ function openAuthSessionAsync(url, redirectUrl) {
         return;
       }
       if (next === 'active' && sawBackground && !settled) {
-        // #region agent log
-        dbg('D', 'ExpoWebBrowser.js:appState', 'app resumed without deep link', {
-          redirectBase,
-        });
-        // #endregion
         finish({ type: 'dismiss' });
       }
     });

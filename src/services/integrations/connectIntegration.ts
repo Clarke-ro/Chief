@@ -4,7 +4,6 @@ import * as WebBrowser from 'expo-web-browser';
 import type { BackendIntegrationProvider } from '@/config/integrations/providerMap';
 import { ensureActiveWorkspaceId, isWorkspaceUuid } from '@/services/activeWorkspace';
 import { ApiError } from '@/services/api/client';
-import { agentLog } from '@/services/debugAgentLog';
 import { integrationsRepository } from '@/services/repositories/integrationsRepository';
 
 export type ConnectIntegrationResult =
@@ -38,22 +37,7 @@ export async function connectIntegration(
   try {
     resolvedWorkspaceId =
       workspaceId && isWorkspaceUuid(workspaceId) ? workspaceId : await ensureActiveWorkspaceId();
-    // #region agent log
-    agentLog('D', 'connectIntegration.ts:resolveWorkspace', 'workspace resolved', {
-      provider,
-      passedWorkspace: workspaceId ?? null,
-      resolvedWorkspaceId,
-      passedIsValid: Boolean(workspaceId && isWorkspaceUuid(workspaceId)),
-    });
-    // #endregion
-  } catch (error) {
-    // #region agent log
-    agentLog('D', 'connectIntegration.ts:resolveFail', 'workspace resolve failed', {
-      provider,
-      passedWorkspace: workspaceId ?? null,
-      errorMessage: error instanceof Error ? error.message : 'unknown',
-    });
-    // #endregion
+  } catch {
     return {
       ok: false,
       reason: 'failed',
@@ -71,34 +55,7 @@ export async function connectIntegration(
       redirectUrl,
     );
     authorizeUrl = connectResponse.authorizeUrl;
-    // #region agent log
-    agentLog(
-      'G',
-      'connectIntegration.ts:connectApi',
-      'connect api ok with returnTo',
-      {
-        provider,
-        hasAuthorizeUrl: Boolean(authorizeUrl),
-        returnTo: redirectUrl,
-        authorizeHost: (() => {
-          try {
-            return new URL(authorizeUrl).host;
-          } catch {
-            return null;
-          }
-        })(),
-      },
-      'post-fix',
-    );
-    // #endregion
   } catch (error) {
-    // #region agent log
-    agentLog('F', 'connectIntegration.ts:connectApiFail', 'connect api failed', {
-      provider,
-      status: error instanceof ApiError ? error.status : null,
-      message: error instanceof Error ? error.message : 'unknown',
-    });
-    // #endregion
     if (error instanceof ApiError && error.status === 401) {
       return {
         ok: false,
@@ -120,43 +77,7 @@ export async function connectIntegration(
     };
   }
 
-  // #region agent log
-  agentLog(
-    'G',
-    'connectIntegration.ts:openBrowser',
-    'opening auth session',
-    {
-      provider,
-      redirectUrl,
-    },
-    'post-fix',
-  );
-  // #endregion
-
   const result = await WebBrowser.openAuthSessionAsync(authorizeUrl, redirectUrl);
-  // #region agent log
-  agentLog(
-    'C',
-    'connectIntegration.ts:browserResult',
-    'auth session result',
-    {
-      provider,
-      resultType: result?.type ?? null,
-      hasUrl: Boolean(result && 'url' in result && result.url),
-      urlScheme: (() => {
-        try {
-          if (result && 'url' in result && typeof result.url === 'string') {
-            return new URL(result.url).protocol;
-          }
-        } catch {
-          return null;
-        }
-        return null;
-      })(),
-    },
-    'post-fix',
-  );
-  // #endregion
 
   if (result.type === 'success') {
     const parsed = Linking.parse(result.url);
@@ -172,21 +93,8 @@ export async function connectIntegration(
     return { ok: true, provider };
   }
 
-  // Deep link may have failed (invalid chief://) but OAuth can still succeed server-side.
+  // Deep link may fail; OAuth can still succeed server-side — confirm via API.
   const connectedAfterReturn = await isProviderConnected(provider, resolvedWorkspaceId);
-  // #region agent log
-  agentLog(
-    'D',
-    'connectIntegration.ts:fallbackCheck',
-    'checked connection after non-success browser result',
-    {
-      provider,
-      resultType: result?.type ?? null,
-      connectedAfterReturn,
-    },
-    'post-fix',
-  );
-  // #endregion
   if (connectedAfterReturn) {
     return { ok: true, provider };
   }
