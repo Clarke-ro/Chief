@@ -1,0 +1,84 @@
+import { z } from 'zod';
+
+export const envSchema = z.object({
+  NODE_ENV: z
+    .enum(['development', 'production', 'test'])
+    .default('development'),
+  PORT: z.coerce.number().int().positive().default(3000),
+  APP_NAME: z.string().default('chief-api'),
+  API_PREFIX: z.string().default('v1'),
+  CORS_ORIGINS: z.string().default('http://localhost:8081'),
+
+  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  REDIS_URL: z.string().min(1, 'REDIS_URL is required'),
+
+  BETTER_AUTH_SECRET: z
+    .string()
+    .min(32, 'BETTER_AUTH_SECRET must be at least 32 characters'),
+  /** Explicit public API URL. Optional on Railway if RAILWAY_PUBLIC_DOMAIN is set. */
+  BETTER_AUTH_URL: z.string().url().optional(),
+  /** Injected by Railway when a public domain is assigned. */
+  RAILWAY_PUBLIC_DOMAIN: z.string().optional(),
+
+  ENCRYPTION_KEY: z
+    .string()
+    .min(32, 'ENCRYPTION_KEY must be at least 32 characters'),
+
+  OAUTH_REDIRECT_BASE_URL: z.string().url().optional(),
+  APP_OAUTH_SUCCESS_URL: z
+    .string()
+    .default('chief://integrations/callback?status=success'),
+  APP_OAUTH_ERROR_URL: z
+    .string()
+    .default('chief://integrations/callback?status=error'),
+
+  GOOGLE_CLIENT_ID: z.string().optional().default(''),
+  GOOGLE_CLIENT_SECRET: z.string().optional().default(''),
+  MICROSOFT_CLIENT_ID: z.string().optional().default(''),
+  MICROSOFT_CLIENT_SECRET: z.string().optional().default(''),
+  MICROSOFT_TENANT_ID: z.string().optional().default('common'),
+  SLACK_CLIENT_ID: z.string().optional().default(''),
+  SLACK_CLIENT_SECRET: z.string().optional().default(''),
+  GITHUB_CLIENT_ID: z.string().optional().default(''),
+  GITHUB_CLIENT_SECRET: z.string().optional().default(''),
+  NOTION_CLIENT_ID: z.string().optional().default(''),
+  NOTION_CLIENT_SECRET: z.string().optional().default(''),
+
+  LOG_LEVEL: z
+    .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+    .default('info'),
+
+  SWAGGER_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+});
+
+export type Env = z.infer<typeof envSchema>;
+
+export function validateEnv(config: Record<string, unknown>): Env {
+  const result = envSchema.safeParse(config);
+  if (!result.success) {
+    const details = result.error.issues
+      .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+      .join('; ');
+    throw new Error(`Invalid environment configuration: ${details}`);
+  }
+
+  const env = result.data;
+  if (!env.BETTER_AUTH_URL && !env.RAILWAY_PUBLIC_DOMAIN) {
+    throw new Error(
+      'Invalid environment configuration: set BETTER_AUTH_URL or RAILWAY_PUBLIC_DOMAIN',
+    );
+  }
+
+  return env;
+}
+
+/** Stable public HTTPS origin for Better Auth + OAuth callbacks. */
+export function resolvePublicBaseUrl(env: Env): string {
+  if (env.BETTER_AUTH_URL) {
+    return env.BETTER_AUTH_URL.replace(/\/$/, '');
+  }
+  return `https://${env.RAILWAY_PUBLIC_DOMAIN}`.replace(/\/$/, '');
+}

@@ -1,0 +1,182 @@
+// Chief — Prisma schema
+// Identity + Better Auth + Connected work integrations (Phase 2)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Better Auth core ───────────────────────────────────────────────
+
+model User {
+  id                   String   @id @default(cuid())
+  name                 String
+  email                String   @unique
+  emailVerified        Boolean  @default(false)
+  image                String?
+  onboardingCompleted  Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  sessions           Session[]
+  accounts           Account[]
+  memberships        Membership[]
+  connectedAccounts  ConnectedAccount[]
+  auditLogs          AuditLog[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ─── Tenancy ────────────────────────────────────────────────────────
+
+enum MembershipRole {
+  owner
+  admin
+  member
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships       Membership[]
+  connectedAccounts ConnectedAccount[]
+  auditLogs         AuditLog[]
+
+  @@map("workspace")
+}
+
+model Membership {
+  id          String         @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        MembershipRole @default(owner)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("membership")
+}
+
+// ─── Work integrations (official OAuth) ─────────────────────────────
+
+enum IntegrationProvider {
+  google
+  microsoft
+  slack
+  github
+  notion
+}
+
+enum ConnectedAccountStatus {
+  active
+  needs_reauth
+  revoked
+}
+
+model ConnectedAccount {
+  id                String                 @id @default(cuid())
+  workspaceId       String
+  userId            String
+  provider          IntegrationProvider
+  providerAccountId String
+  displayName       String?
+  email             String?
+  status            ConnectedAccountStatus @default(active)
+  scopes            String[]               @default([])
+  /// AES-GCM encrypted JSON: { accessToken, refreshToken?, tokenType?, raw? }
+  encryptedTokens   String
+  tokenExpiresAt    DateTime?
+  lastHealthCheckAt DateTime?
+  lastHealthOk      Boolean?
+  lastHealthMessage String?
+  metadata          Json?
+  connectedAt       DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  revokedAt         DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, provider, providerAccountId])
+  @@index([workspaceId, provider])
+  @@index([userId])
+  @@index([status])
+  @@map("connected_account")
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  workspaceId  String?
+  actorUserId  String?
+  action       String
+  resource     String?
+  metaJson     Json?
+  ip           String?
+  createdAt    DateTime @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  actor     User?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("audit_log")
+}
