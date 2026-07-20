@@ -24,6 +24,17 @@ async function bootstrap() {
   const expressApp = app.getHttpAdapter().getInstance() as express.Express;
   const auth = app.get<BetterAuthInstance>(BETTER_AUTH);
 
+  // Better Auth Expo: copy expo-origin → origin for native clients (Expo Go sends no Origin header).
+  expressApp.use('/api/auth', (req, _res, next) => {
+    if (!req.headers.origin && req.headers['expo-origin']) {
+      const expoOrigin = req.headers['expo-origin'];
+      req.headers.origin = Array.isArray(expoOrigin)
+        ? expoOrigin[0]
+        : expoOrigin;
+    }
+    next();
+  });
+
   expressApp.all(/^\/api\/auth\/.*$/, toNodeHandler(auth));
   expressApp.use(express.json({ limit: '2mb' }));
   expressApp.use(express.urlencoded({ extended: true }));
@@ -32,6 +43,13 @@ async function bootstrap() {
   app.enableCors({
     origin: config.corsOrigins.includes('*') ? true : config.corsOrigins,
     credentials: true,
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'expo-origin',
+      'x-skip-oauth-proxy',
+    ],
   });
 
   app.setGlobalPrefix(config.apiPrefix, {

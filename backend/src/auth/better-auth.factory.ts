@@ -21,11 +21,18 @@ export function createBetterAuth(
   const mobileOrigins = [
     'chief://',
     'chief://*',
-    // Expo Go / dev client may send exp:// origins during local testing
+    // Expo Go — always allow (app may hit production API during dev)
     'exp://',
     'exp://**',
+    'exp://*',
+    'exp://192.168.*.*:*',
     'exp://192.168.*.*:*/**',
+    'exp://10.*.*.*:*',
     'exp://10.*.*.*:*/**',
+    'exp://127.0.0.1:*',
+    'exp://127.0.0.1:*/**',
+    'exp://localhost:*',
+    'exp://localhost:*/**',
   ];
   const trustedOrigins = Array.from(
     new Set([...options.trustedOrigins, baseOrigin, ...mobileOrigins]),
