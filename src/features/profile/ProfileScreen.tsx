@@ -1,19 +1,35 @@
 ﻿import Constants from 'expo-constants';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check } from 'lucide-react-native';
-import { useCallback } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppHeader } from '@/components/ui';
+import type { BackendIntegrationProvider } from '@/config/integrations/providerMap';
+import { dispatchAction } from '@/features/actions';
+import { ConnectMoreAppsSheet } from '@/features/profile/components/ConnectMoreAppsSheet';
 import { ConnectedAppsGrid } from '@/features/profile/components/ConnectedAppsGrid';
 import { ProfileIdentity } from '@/features/profile/components/ProfileIdentity';
 import { ProfileSectionLabel } from '@/features/profile/components/ProfileSectionLabel';
 import { SettingRow } from '@/features/profile/components/SettingRow';
 import { SettingsGroup } from '@/features/profile/components/SettingsGroup';
 import { SubscriptionBanner } from '@/features/profile/components/SubscriptionBanner';
-import { dispatchAction } from '@/features/actions';
+import { mapLiveConnectedApps } from '@/features/profile/mapLiveConnectedApps';
+import type { ConnectedApp } from '@/features/profile/types';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { clearUserSession, workspaceNav } from '@/services';
+import { ensureActiveWorkspaceId } from '@/services/activeWorkspace';
+import { connectIntegration } from '@/services/integrations/connectIntegration';
+import { clearUserSession, queryKeys, workspaceNav } from '@/services';
+import { integrationsRepository } from '@/services/repositories/integrationsRepository';
 import { usePreferencesStore, useWorkspaceStore, type ThemePreference } from '@/stores';
 import { spacing, typography } from '@/theme';
 
@@ -62,18 +78,137 @@ const noop = () => {};
 export function ProfileScreen() {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const themePref = usePreferencesStore((s) => s.theme);
   const setTheme = usePreferencesStore((s) => s.setTheme);
+  const [busyAppId, setBusyAppId] = useState<string | null>(null);
+  const [connectSheetOpen, setConnectSheetOpen] = useState(false);
 
   const profile = useWorkspaceStore((s) => s.profile);
   const notifications = profile.notifications;
   const setNotificationEnabled = useWorkspaceStore((s) => s.setNotificationEnabled);
+
+  const workspaceQuery = useQuery({
+    queryKey: [...queryKeys.root, 'activeWorkspace'],
+    queryFn: ensureActiveWorkspaceId,
+    retry: 1,
+  });
+  const workspaceId = workspaceQuery.data;
+
+  const integrationsQuery = useQuery({
+    queryKey: queryKeys.integrations(workspaceId),
+    queryFn: () => integrationsRepository.list(workspaceId!),
+    enabled: Boolean(workspaceId),
+  });
+
+  const connectedApps = useMemo(
+    () => mapLiveConnectedApps(integrationsQuery.data?.connections),
+    [integrationsQuery.data?.connections],
+  );
 
   const toggleNotification = useCallback(
     (id: string, next: boolean) => {
       setNotificationEnabled(id, next);
     },
     [setNotificationEnabled],
+  );
+
+  const invalidateIntegrations = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.integrations(workspaceId) });
+  }, [queryClient, workspaceId]);
+
+  const runConnect = useCallback(
+    async (provider: BackendIntegrationProvider, appId: string) => {
+      setBusyAppId(appId);
+      try {
+        const result = await connectIntegration(provider, workspaceId);
+        await invalidateIntegrations();
+        if (!result.ok && result.reason === 'failed' && result.message) {
+          Alert.alert('Connect failed', result.message);
+        }
+      } catch {
+        Alert.alert('Connect failed', 'Could not start OAuth. Check your connection and try again.');
+      } finally {
+        setBusyAppId(null);
+      }
+    },
+    [invalidateIntegrations, workspaceId],
+  );
+
+  const runDisconnect = useCallback(
+    async (app: ConnectedApp) => {
+      if (!workspaceId || !app.connectionId) return;
+      setBusyAppId(app.id);
+      try {
+        await integrationsRepository.disconnect(app.connectionId, workspaceId);
+        await invalidateIntegrations();
+      } catch {
+        Alert.alert('Disconnect failed', 'Could not disconnect this app. Try again.');
+      } finally {
+        setBusyAppId(null);
+      }
+    },
+    [invalidateIntegrations, workspaceId],
+  );
+
+  const handleAppPress = useCallback(
+    (app: ConnectedApp) => {
+      if (busyAppId) return;
+      const provider = app.provider as BackendIntegrationProvider | undefined;
+      if (!provider) return;
+
+      if (app.connected && app.needsReauth) {
+        Alert.alert(
+          `Reconnect ${app.name}?`,
+          app.accountLabel
+            ? `${app.accountLabel} needs to sign in again.`
+            : 'This connection expired. Sign in again to keep using it.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Reconnect',
+              onPress: () => {
+                void runConnect(provider, app.id);
+              },
+            },
+          ],
+        );
+        return;
+      }
+
+      if (app.connected) {
+        const disconnectTitle =
+          app.provider === 'google' ? 'Disconnect Google?' : `Disconnect ${app.name}?`;
+        const disconnectBody =
+          app.provider === 'google'
+            ? 'This removes Gmail and Calendar access for Chief.'
+            : app.accountLabel
+              ? `Connected as ${app.accountLabel}.\nChief only reads what you allow.`
+              : 'Chief only reads what you allow.';
+        Alert.alert(disconnectTitle, disconnectBody, [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Disconnect',
+            style: 'destructive',
+            onPress: () => {
+              void runDisconnect(app);
+            },
+          },
+        ]);
+        return;
+      }
+
+      Alert.alert(`Connect ${app.name}?`, 'Chief will open a secure sign-in in your browser.', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Connect',
+          onPress: () => {
+            void runConnect(provider, app.id);
+          },
+        },
+      ]);
+    },
+    [busyAppId, runConnect, runDisconnect],
   );
 
   const version = Constants.expoConfig?.version ?? '1.0.0';
@@ -84,6 +219,7 @@ export function ProfileScreen() {
     '1';
 
   const bottomPad = insets.bottom + (Platform.OS === 'ios' ? 88 : 24);
+  const appsLoading = workspaceQuery.isLoading || integrationsQuery.isLoading;
 
   return (
     <View
@@ -116,22 +252,35 @@ export function ProfileScreen() {
                 title="Connected Apps"
                 description="Where Chief gets context for your day."
               />
-              <ConnectedAppsGrid
-                apps={profile.connectedApps}
-                onAppPress={(app) =>
-                  askFromProfile(
-                    app.connected
-                      ? `How are you using ${app.name} in my day plan?`
-                      : `Help me connect ${app.name} and use it in my brief.`,
-                  )
-                }
-                onConnectMore={() =>
-                  askFromProfile(
-                    'Which apps should I connect next to improve my daily brief?',
-                  )
-                }
-              />
+              {appsLoading ? (
+                <View style={styles.appsLoading}>
+                  <ActivityIndicator color={colors.accent} />
+                </View>
+              ) : (
+                <ConnectedAppsGrid
+                  apps={connectedApps}
+                  onAppPress={handleAppPress}
+                  onConnectMore={() => setConnectSheetOpen(true)}
+                />
+              )}
+              {busyAppId ? (
+                <View style={styles.busyRow}>
+                  <ActivityIndicator size="small" color={colors.accent} />
+                  <Text style={[styles.busyText, { color: colors.textSecondary }]}>
+                    Updating connection…
+                  </Text>
+                </View>
+              ) : null}
             </View>
+
+            <ConnectMoreAppsSheet
+              visible={connectSheetOpen}
+              onClose={() => setConnectSheetOpen(false)}
+              apps={connectedApps}
+              workspaceId={workspaceId}
+              onConnected={invalidateIntegrations}
+            />
+
 
             <SettingsGroup
               title="Chief"
@@ -310,6 +459,21 @@ const styles = StyleSheet.create({
   },
   plainBlock: {
     paddingHorizontal: spacing[16],
+  },
+  appsLoading: {
+    minHeight: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  busyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[8],
+    paddingTop: spacing[12],
+  },
+  busyText: {
+    ...typography.caption,
   },
   version: {
     ...typography.caption,

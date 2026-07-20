@@ -5,6 +5,11 @@ export type ConnectedApp = {
   platform: PlatformIconId;
   name: string;
   connected: boolean;
+  /** Present when connected via live OAuth. */
+  connectionId?: string;
+  provider?: string;
+  needsReauth?: boolean;
+  accountLabel?: string | null;
 };
 
 export type NotificationPref = {

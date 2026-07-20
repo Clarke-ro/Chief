@@ -56,4 +56,22 @@ export const integrationsRepository = {
       method: 'DELETE',
     });
   },
+
+  reconnect(
+    connectedAccountId: string,
+    workspaceId: string,
+    returnTo?: string,
+  ): Promise<ConnectIntegrationResponse> {
+    return apiJson<ConnectIntegrationResponse>(
+      `/v1/integrations/${connectedAccountId}/reconnect`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspaceId,
+          ...(returnTo ? { returnTo } : {}),
+        }),
+      },
+    );
+  },
 };

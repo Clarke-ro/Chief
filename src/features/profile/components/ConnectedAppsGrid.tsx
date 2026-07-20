@@ -33,7 +33,11 @@ export function ConnectedAppsGrid({ apps, onAppPress, onConnectMore }: Connected
                 style={[
                   styles.dot,
                   {
-                    backgroundColor: app.connected ? colors.success : colors.textTertiary,
+                    backgroundColor: app.needsReauth
+                      ? colors.warning
+                      : app.connected
+                        ? colors.success
+                        : colors.textTertiary,
                     borderColor: colors.bgElevated,
                   },
                 ]}
@@ -67,7 +71,7 @@ export function ConnectedAppsGrid({ apps, onAppPress, onConnectMore }: Connected
       </View>
 
       <Text style={[styles.hint, { color: colors.textTertiary }]}>
-        Green means connected. Chief only reads what you allow.
+        Green is connected. Amber needs reconnect. Tap an app to manage it.
       </Text>
     </GroupedCard>
   );
