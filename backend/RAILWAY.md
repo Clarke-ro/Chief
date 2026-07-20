@@ -15,8 +15,9 @@ Railway service **Root Directory** = `backend`. Do not split repos unless the te
    - Root Directory: `backend`
    - Builder: Dockerfile (`backend/Dockerfile`)
 3. Add plugins (or variables):
-   - **Postgres** → set `DATABASE_URL` to your **Supabase** connection string
-   - **Redis** → set `REDIS_URL` to your **Upstash** Redis URL (`rediss://…`)
+   - **Do not** use Railway Postgres/Redis plugins for Chief — use **Supabase** + **Upstash**
+   - Set `DATABASE_URL` to your **Supabase** connection string (session pooler is fine for the API)
+   - Set `REDIS_URL` to your **Upstash** Redis URL (`rediss://…`)
      - BullMQ needs the **TCP Redis URL**, not Upstash REST
 4. Set variables (see checklist below)
 5. Generate domain: Settings → Networking → Public Networking
