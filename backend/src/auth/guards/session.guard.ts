@@ -13,6 +13,11 @@ import type { BetterAuthInstance } from '../better-auth.factory';
 import type { AuthUser } from '../decorators/current-user.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
+const SESSION_COOKIE_NAMES = [
+  'better-auth.session_token',
+  '__Secure-better-auth.session_token',
+];
+
 @Injectable()
 export class SessionGuard implements CanActivate {
   constructor(
@@ -29,14 +34,11 @@ export class SessionGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<
-      Request & { user?: AuthUser; session?: unknown }
-    >();
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { user?: AuthUser; session?: unknown }>();
 
-    const session = await this.auth.api.getSession({
-      headers: fromNodeHeaders(request.headers),
-    });
-
+    const session = await this.resolveSession(request);
     if (!session?.user) {
       throw new UnauthorizedException('Authentication required');
     }
@@ -52,5 +54,34 @@ export class SessionGuard implements CanActivate {
     };
     request.session = session.session;
     return true;
+  }
+
+  private async resolveSession(request: Request) {
+    const headers = new Headers(fromNodeHeaders(request.headers));
+    let session = await this.auth.api.getSession({ headers });
+    if (session?.user) {
+      return session;
+    }
+
+    const bearer = request.headers.authorization;
+    if (!bearer?.toLowerCase().startsWith('bearer ')) {
+      return session;
+    }
+
+    const token = bearer.slice(7).trim();
+    if (!token) {
+      return session;
+    }
+
+    for (const cookieName of SESSION_COOKIE_NAMES) {
+      const bearerHeaders = new Headers();
+      bearerHeaders.set('cookie', `${cookieName}=${token}`);
+      session = await this.auth.api.getSession({ headers: bearerHeaders });
+      if (session?.user) {
+        return session;
+      }
+    }
+
+    return session;
   }
 }

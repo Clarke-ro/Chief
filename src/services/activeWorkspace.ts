@@ -1,4 +1,5 @@
 import { DEFAULT_WORKSPACE_ID, type WorkspaceId } from '@/config/workspace';
+import { authClient } from '@/services/auth/authClient';
 import { GLOBAL_KEYS } from '@/services/storageKeys';
 import { storage } from '@/services/storage';
 
@@ -24,6 +25,11 @@ export async function ensureActiveWorkspaceId(): Promise<string> {
   const current = getActiveWorkspaceId();
   if (isWorkspaceUuid(current)) {
     return current;
+  }
+
+  const session = await authClient.getSession();
+  if (!session.data?.session) {
+    throw new Error('Not signed in.');
   }
 
   const { authService } = await import('@/services/auth/authService');

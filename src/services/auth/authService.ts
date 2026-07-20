@@ -114,6 +114,12 @@ export const authService = {
   },
 
   async bootstrapSession(): Promise<MeResponse> {
+    const session = await authClient.getSession();
+    if (!session.data?.session) {
+      throw new AuthServiceError('Not signed in.');
+    }
+
+    await syncBearerFromSession();
     const me = await apiJson<MeResponse>('/v1/me');
     const primary = me.workspaces[0];
     if (primary) {

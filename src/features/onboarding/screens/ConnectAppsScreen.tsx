@@ -46,6 +46,7 @@ export function ConnectAppsScreen() {
   const workspaceQuery = useQuery({
     queryKey: [...queryKeys.root, 'activeWorkspace'],
     queryFn: ensureActiveWorkspaceId,
+    retry: 1,
   });
 
   const workspaceId = workspaceQuery.data;
@@ -157,7 +158,10 @@ export function ConnectAppsScreen() {
 
         {workspaceQuery.isError ? (
           <Text style={[styles.errorText, { color: colors.textSecondary }]}>
-            Could not load your workspace. Go back, sign in again, then return here.
+            {workspaceQuery.error instanceof Error &&
+            workspaceQuery.error.message === 'Not signed in.'
+              ? 'Your session expired. Go back and sign in again.'
+              : 'Could not load your workspace. Pull down to reload the app, or go back and sign in again.'}
           </Text>
         ) : null}
 

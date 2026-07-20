@@ -1,6 +1,8 @@
 import { env } from '@/config/env';
 import { authSession } from '@/services/api/authSession';
 import { getAuthClient } from '@/services/auth/authClient';
+import { getMobileAuthOrigin } from '@/services/auth/mobileOrigin';
+import { Platform } from 'react-native';
 
 export class ApiConfigError extends Error {
   constructor(message = 'API base URL is not configured.') {
@@ -53,14 +55,18 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}): Pro
   }
 
   if (!options.skipAuth) {
-    const token = await authSession.getAccessToken();
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
+    const cookie = getAuthClient().getCookie();
+    if (cookie) {
+      headers.set('Cookie', cookie);
     } else {
-      const cookie = getAuthClient().getCookie();
-      if (cookie) {
-        headers.set('Cookie', cookie);
+      const token = await authSession.getAccessToken();
+      if (token) {
+        headers.set('Authorization', `Bearer ${token}`);
       }
+    }
+
+    if (Platform.OS !== 'web') {
+      headers.set('expo-origin', getMobileAuthOrigin());
     }
   }
 
