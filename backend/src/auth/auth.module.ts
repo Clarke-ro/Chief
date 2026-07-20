@@ -22,6 +22,7 @@ import { SessionGuard } from './guards/session.guard';
           secret: config.betterAuth.secret,
           baseURL: config.betterAuth.url,
           trustedOrigins: config.corsOrigins,
+          apiKey: config.betterAuth.apiKey,
         }),
     },
     AuthService,

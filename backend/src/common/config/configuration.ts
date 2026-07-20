@@ -18,6 +18,7 @@ export type AppConfig = {
   betterAuth: {
     secret: string;
     url: string;
+    apiKey?: string;
   };
   encryptionKey: string;
   oauth: {
@@ -53,6 +54,7 @@ export function buildConfiguration(env: Env): AppConfig {
     betterAuth: {
       secret: env.BETTER_AUTH_SECRET,
       url: publicBaseUrl,
+      apiKey: env.BETTER_AUTH_API_KEY || undefined,
     },
     encryptionKey: env.ENCRYPTION_KEY,
     oauth: {

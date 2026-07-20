@@ -15,6 +15,11 @@ export const envSchema = z.object({
   BETTER_AUTH_SECRET: z
     .string()
     .min(32, 'BETTER_AUTH_SECRET must be at least 32 characters'),
+  /**
+   * Better Auth Infrastructure dashboard key (`ba_...`).
+   * Different from BETTER_AUTH_SECRET (cookie/session signing).
+   */
+  BETTER_AUTH_API_KEY: z.string().optional().default(''),
   /** Explicit public API URL. Optional on Railway if RAILWAY_PUBLIC_DOMAIN is set. */
   BETTER_AUTH_URL: z.string().url().optional(),
   /** Injected by Railway when a public domain is assigned. */

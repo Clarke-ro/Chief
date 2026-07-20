@@ -1,4 +1,5 @@
 import { prismaAdapter } from '@better-auth/prisma-adapter';
+import { dash } from '@better-auth/infra';
 import type { PrismaClient } from '@prisma/client';
 import { betterAuth } from 'better-auth';
 
@@ -10,12 +11,23 @@ export function createBetterAuth(
     secret: string;
     baseURL: string;
     trustedOrigins: string[];
+    /** Better Auth Infrastructure dashboard API key (`ba_...`). */
+    apiKey?: string;
   },
 ) {
   const baseOrigin = new URL(options.baseURL).origin;
   const trustedOrigins = Array.from(
     new Set([...options.trustedOrigins, baseOrigin]),
   );
+
+  const plugins = [];
+  if (options.apiKey) {
+    plugins.push(
+      dash({
+        apiKey: options.apiKey,
+      }),
+    );
+  }
 
   return betterAuth({
     database: prismaAdapter(prisma, {
@@ -43,5 +55,6 @@ export function createBetterAuth(
       expiresIn: 60 * 60 * 24 * 30,
       updateAge: 60 * 60 * 24,
     },
+    plugins,
   });
 }
