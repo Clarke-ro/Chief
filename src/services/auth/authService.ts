@@ -1,0 +1,111 @@
+import { authClient } from '@/services/auth/authClient';
+import type { MeResponse } from '@/services/auth/types';
+import { apiJson } from '@/services/api/client';
+import { authSession } from '@/services/api/authSession';
+import { persistActiveWorkspaceId } from '@/services/activeWorkspace';
+
+export class AuthServiceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuthServiceError';
+  }
+}
+
+type AuthTokenPayload = {
+  token?: string | null;
+};
+
+function extractToken(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const token = (payload as AuthTokenPayload).token;
+  return typeof token === 'string' && token.length > 0 ? token : null;
+}
+
+async function persistBearerToken(payload: unknown): Promise<void> {
+  const token = extractToken(payload);
+  if (token) {
+    await authSession.setTokens({ accessToken: token });
+  }
+}
+
+function formatAuthError(error: unknown): string {
+  if (error && typeof error === 'object') {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) {
+      return message;
+    }
+  }
+  return 'Authentication failed. Check your credentials and try again.';
+}
+
+export const authService = {
+  async signIn(email: string, password: string): Promise<MeResponse> {
+    const trimmedEmail = email.trim();
+    const result = await authClient.signIn.email({
+      email: trimmedEmail,
+      password,
+    });
+
+    if (result.error) {
+      throw new AuthServiceError(formatAuthError(result.error));
+    }
+
+    await persistBearerToken(result.data);
+    return authService.bootstrapSession();
+  },
+
+  async signUp(input: { email: string; password: string; name?: string }): Promise<MeResponse> {
+    const trimmedEmail = input.email.trim();
+    const name = input.name?.trim() || trimmedEmail.split('@')[0] || 'Chief user';
+
+    const result = await authClient.signUp.email({
+      email: trimmedEmail,
+      password: input.password,
+      name,
+    });
+
+    if (result.error) {
+      throw new AuthServiceError(formatAuthError(result.error));
+    }
+
+    await persistBearerToken(result.data);
+    return authService.bootstrapSession();
+  },
+
+  async signOut(): Promise<void> {
+    try {
+      await authClient.signOut();
+    } catch {
+      // Local wipe still runs even if remote sign-out fails.
+    }
+    await authSession.clear();
+  },
+
+  async restoreSession(): Promise<MeResponse | null> {
+    const session = await authClient.getSession();
+    if (!session.data?.session) {
+      return null;
+    }
+
+    const token = extractToken(session.data);
+    if (token) {
+      await authSession.setTokens({ accessToken: token });
+    }
+
+    try {
+      return await authService.bootstrapSession();
+    } catch {
+      await authSession.clear();
+      return null;
+    }
+  },
+
+  async bootstrapSession(): Promise<MeResponse> {
+    const me = await apiJson<MeResponse>('/v1/me');
+    const primary = me.workspaces[0];
+    if (primary) {
+      persistActiveWorkspaceId(primary.id);
+    }
+    return me;
+  },
+};

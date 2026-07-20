@@ -31,7 +31,7 @@ Railway service **Root Directory** = `backend`. Do not split repos unless the te
 | `BETTER_AUTH_SECRET` | 32+ random chars |
 | `ENCRYPTION_KEY` | 32+ random chars |
 | `BETTER_AUTH_URL` | Optional if `RAILWAY_PUBLIC_DOMAIN` is present |
-| `CORS_ORIGINS` | Expo / web origins |
+| `CORS_ORIGINS` | Expo / web origins — include `chief://` for the mobile app |
 | Provider `*_CLIENT_ID` / `*_CLIENT_SECRET` | As needed (Microsoft optional) |
 
 `RAILWAY_PUBLIC_DOMAIN` is injected by Railway when a public domain exists.

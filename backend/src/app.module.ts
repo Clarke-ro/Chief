@@ -3,6 +3,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { ActionsModule } from './actions/actions.module';
 import { AiModule } from './ai/ai.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { AppController } from './app.controller';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { BriefingModule } from './briefing/briefing.module';
@@ -85,5 +86,6 @@ import { WorkspaceModule } from './workspace/workspace.module';
     RealtimeModule,
     AuditModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}

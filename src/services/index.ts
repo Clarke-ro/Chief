@@ -21,7 +21,10 @@ export {
   analyticsRepository,
   chiefRepository,
   onboardingRepository,
+  integrationsRepository,
 } from './repositories';
+export { authService, AuthServiceError } from './auth/authService';
+export { authClient } from './auth/authClient';
 export { assertSafeExternalUrl, summarizeUrlForDisplay } from './safeUrl';
 export { clearUserSession } from './sessionCleanup';
 export { storage } from './storage';

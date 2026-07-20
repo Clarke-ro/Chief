@@ -27,6 +27,7 @@
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
+    "@better-auth/expo": "^1.6.23",
     "@better-auth/infra": "^0.3.6",
     "@better-auth/prisma-adapter": "^1.6.23",
     "@better-auth/utils": "^0.4.2",

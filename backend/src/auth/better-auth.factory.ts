@@ -1,7 +1,9 @@
+import { expo } from '@better-auth/expo';
 import { prismaAdapter } from '@better-auth/prisma-adapter';
 import { dash } from '@better-auth/infra';
 import type { PrismaClient } from '@prisma/client';
 import { betterAuth } from 'better-auth';
+import { bearer } from 'better-auth/plugins';
 
 export type BetterAuthInstance = ReturnType<typeof createBetterAuth>;
 
@@ -16,18 +18,30 @@ export function createBetterAuth(
   },
 ) {
   const baseOrigin = new URL(options.baseURL).origin;
+  const mobileOrigins = [
+    'chief://',
+    'chief://*',
+    // Expo Go / dev client may send exp:// origins during local testing
+    'exp://',
+    'exp://**',
+    'exp://192.168.*.*:*/**',
+    'exp://10.*.*.*:*/**',
+  ];
   const trustedOrigins = Array.from(
-    new Set([...options.trustedOrigins, baseOrigin]),
+    new Set([...options.trustedOrigins, baseOrigin, ...mobileOrigins]),
   );
 
-  const plugins = [];
-  if (options.apiKey) {
-    plugins.push(
-      dash({
-        apiKey: options.apiKey,
-      }),
-    );
-  }
+  const plugins = [
+    expo(),
+    bearer(),
+    ...(options.apiKey
+      ? [
+          dash({
+            apiKey: options.apiKey,
+          }),
+        ]
+      : []),
+  ];
 
   return betterAuth({
     database: prismaAdapter(prisma, {

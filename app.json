@@ -38,7 +38,8 @@
             "image": "./assets/splash-icon.png"
           }
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

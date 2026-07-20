@@ -36,6 +36,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix(config.apiPrefix, {
     exclude: [
+      '',
       'health',
       'health/(.*)',
       'docs',

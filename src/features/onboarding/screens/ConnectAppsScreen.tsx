@@ -1,37 +1,103 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Check } from 'lucide-react-native';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 
 import { PlatformIcon, type PlatformIconId } from '@/components/ui';
+import {
+  isOnboardingAppConnected,
+  isOnboardingAppSupported,
+  providerForOnboardingApp,
+} from '@/config/integrations/providerMap';
 import { OnboardingCopy } from '@/features/onboarding/components/OnboardingCopy';
 import { OnboardingShell } from '@/features/onboarding/components/OnboardingShell';
-import { useOnboardingStore } from '@/features/onboarding/store';
+import type { OnboardingAppId } from '@/features/onboarding/types';
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { onboardingRepository } from '@/services';
+import { getActiveWorkspaceId } from '@/services/activeWorkspace';
+import { connectIntegration } from '@/services/integrations/connectIntegration';
+import { onboardingRepository, queryKeys } from '@/services';
+import { integrationsRepository } from '@/services/repositories/integrationsRepository';
 import { radius, spacing } from '@/theme';
 
 const ONBOARDING_APPS = onboardingRepository.listApps();
 const COLS = 3;
 const GRID_GAP = spacing[12];
 
-/** Step 3 — pick the apps Chief should read. */
+/** Step 3 — connect apps via live OAuth. */
 export function ConnectAppsScreen() {
   const colors = useThemeColors();
   const scheme = useResolvedColorScheme();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
-  const connected = useOnboardingStore((s) => s.connected);
-  const toggleApp = useOnboardingStore((s) => s.toggleApp);
-  const hasAny = connected.size > 0;
+  const workspaceId = getActiveWorkspaceId();
+  const [connectingAppId, setConnectingAppId] = useState<OnboardingAppId | null>(null);
 
+  const integrationsQuery = useQuery({
+    queryKey: queryKeys.integrations(workspaceId),
+    queryFn: () => integrationsRepository.list(workspaceId),
+  });
+
+  const connectedProviders = useMemo(() => {
+    const set = new Set<string>();
+    for (const connection of integrationsQuery.data?.connections ?? []) {
+      if (connection.status !== 'revoked') {
+        set.add(connection.provider);
+      }
+    }
+    return set;
+  }, [integrationsQuery.data?.connections]);
+
+  const hasAny = connectedProviders.size > 0;
   const isLight = scheme === 'light';
   const ink = isLight ? '#111113' : colors.text;
   const inkOn = isLight ? '#FFFFFF' : colors.bg;
-
-  // Shell horizontal padding is 24 each side
   const gridWidth = width - spacing[24] * 2;
   const tileSize = (gridWidth - GRID_GAP * (COLS - 1)) / COLS;
+
+  const handleAppPress = async (appId: OnboardingAppId) => {
+    if (!isOnboardingAppSupported(appId)) {
+      Alert.alert(
+        'Coming soon',
+        `${ONBOARDING_APPS.find((a) => a.id === appId)?.name ?? 'This app'} is not available yet.`,
+      );
+      return;
+    }
+
+    if (isOnboardingAppConnected(appId, connectedProviders)) {
+      return;
+    }
+
+    const provider = providerForOnboardingApp(appId);
+    if (!provider) return;
+
+    setConnectingAppId(appId);
+    try {
+      const result = await connectIntegration(provider, workspaceId);
+      if (result.ok) {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.integrations(workspaceId) });
+        return;
+      }
+      if (result.reason === 'failed' && result.message) {
+        Alert.alert('Connect failed', result.message);
+      }
+    } catch {
+      Alert.alert('Connect failed', 'Could not start OAuth. Check your connection and try again.');
+    } finally {
+      setConnectingAppId(null);
+    }
+  };
 
   return (
     <OnboardingShell
@@ -76,36 +142,48 @@ export function ConnectAppsScreen() {
       >
         <OnboardingCopy title="Connect your apps." />
 
+        {integrationsQuery.isLoading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator />
+          </View>
+        ) : null}
+
         <View style={styles.grid}>
           {ONBOARDING_APPS.map((app) => {
-            const isOn = connected.has(app.id);
+            const isOn = isOnboardingAppConnected(app.id, connectedProviders);
+            const isConnecting = connectingAppId === app.id;
+            const supported = isOnboardingAppSupported(app.id);
+
             return (
               <TouchableOpacity
                 key={app.id}
-                accessibilityRole="switch"
-                accessibilityState={{ checked: isOn }}
+                accessibilityRole="button"
+                accessibilityState={{ checked: isOn, disabled: !supported || isConnecting }}
                 accessibilityLabel={app.name}
                 activeOpacity={0.85}
-                onPress={() => toggleApp(app.id)}
+                disabled={!supported || isConnecting || isOn}
+                onPress={() => void handleAppPress(app.id)}
                 style={[
                   styles.tile,
                   {
                     width: tileSize,
                     backgroundColor: isOn ? colors.accentMuted : colors.bgElevated,
                     borderColor: isOn ? ink : colors.border,
+                    opacity: supported ? 1 : 0.45,
                   },
                 ]}
               >
-                {isOn ? (
+                {isConnecting ? (
+                  <View style={styles.connecting}>
+                    <ActivityIndicator size="small" />
+                  </View>
+                ) : isOn ? (
                   <View style={[styles.check, { backgroundColor: ink }]}>
                     <Check size={12} color={inkOn} strokeWidth={3} />
                   </View>
                 ) : null}
                 <PlatformIcon platform={app.platform as PlatformIconId} size={40} />
-                <Text
-                  style={[styles.tileName, { color: ink }]}
-                  numberOfLines={1}
-                >
+                <Text style={[styles.tileName, { color: ink }]} numberOfLines={1}>
                   {app.name}
                 </Text>
               </TouchableOpacity>
@@ -122,6 +200,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     gap: spacing[24],
     paddingBottom: spacing[16],
+  },
+  loadingRow: {
+    alignItems: 'center',
+    paddingVertical: spacing[8],
   },
   grid: {
     flexDirection: 'row',
@@ -147,6 +229,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  connecting: {
+    position: 'absolute',
+    top: spacing[8],
+    right: spacing[8],
   },
   tileName: {
     fontSize: 13,

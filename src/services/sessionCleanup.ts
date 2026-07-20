@@ -1,4 +1,4 @@
-import { authSession } from '@/services/api/authSession';
+import { authService } from '@/services/auth/authService';
 import { queryClient } from '@/services/queryClient';
 import { getActiveWorkspaceId } from '@/services/activeWorkspace';
 import { offlineQueue } from '@/services/sync/offlineQueue';
@@ -41,7 +41,7 @@ function wipeLocalWorkspaceData() {
 export async function clearUserSession(): Promise<ClearSessionResult> {
   let authCleared = true;
   try {
-    await authSession.clear();
+    await authService.signOut();
   } catch (error) {
     authCleared = false;
     if (__DEV__) {

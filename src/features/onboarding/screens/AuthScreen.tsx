@@ -1,6 +1,8 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -15,20 +17,52 @@ import { OnboardingCopy } from '@/features/onboarding/components/OnboardingCopy'
 import { OnboardingShell } from '@/features/onboarding/components/OnboardingShell';
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { useThemeColors } from '@/hooks/useThemeColors';
+import { authService, AuthServiceError } from '@/services/auth/authService';
 import { radius, spacing, typography } from '@/theme';
 
-/** Step 2 — email/password sign-in, then social options. */
+type AuthMode = 'signIn' | 'signUp';
+
+/** Step 2 — email/password sign-in or sign-up against the live backend. */
 export function AuthScreen() {
   const colors = useThemeColors();
   const scheme = useResolvedColorScheme();
   const router = useRouter();
+  const [mode, setMode] = useState<AuthMode>('signIn');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const continueNext = () => router.push('/onboarding/connect');
   const isLight = scheme === 'light';
   const labelColor = isLight ? '#111113' : colors.text;
   const placeholderColor = colors.textTertiary;
+  const canSubmit = email.trim().length > 0 && password.length >= 8 && !submitting;
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+
+    setSubmitting(true);
+    try {
+      if (mode === 'signIn') {
+        await authService.signIn(email, password);
+      } else {
+        await authService.signUp({ email, password });
+      }
+      continueNext();
+    } catch (error) {
+      const message =
+        error instanceof AuthServiceError
+          ? error.message
+          : 'Could not reach Chief. Check your connection and try again.';
+      Alert.alert(mode === 'signIn' ? 'Sign in failed' : 'Sign up failed', message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const toggleMode = () => {
+    setMode((current) => (current === 'signIn' ? 'signUp' : 'signIn'));
+  };
 
   return (
     <OnboardingShell stepIndex={1} centered={false}>
@@ -56,6 +90,7 @@ export function AuthScreen() {
               autoComplete="email"
               textContentType="emailAddress"
               accessibilityLabel="Email"
+              editable={!submitting}
               style={[
                 styles.input,
                 {
@@ -68,14 +103,15 @@ export function AuthScreen() {
             <TextInput
               value={password}
               onChangeText={setPassword}
-              placeholder="Password"
+              placeholder="Password (8+ characters)"
               placeholderTextColor={placeholderColor}
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
-              autoComplete="password"
-              textContentType="password"
+              autoComplete={mode === 'signIn' ? 'password' : 'new-password'}
+              textContentType={mode === 'signIn' ? 'password' : 'newPassword'}
               accessibilityLabel="Password"
+              editable={!submitting}
               style={[
                 styles.input,
                 {
@@ -88,63 +124,42 @@ export function AuthScreen() {
 
             <TouchableOpacity
               accessibilityRole="button"
-              accessibilityLabel="Sign in"
+              accessibilityLabel={mode === 'signIn' ? 'Sign in' : 'Sign up'}
+              accessibilityState={{ disabled: !canSubmit }}
               activeOpacity={0.85}
-              onPress={continueNext}
-              style={[styles.signInBtn, { backgroundColor: labelColor }]}
+              disabled={!canSubmit}
+              onPress={() => void handleSubmit()}
+              style={[
+                styles.signInBtn,
+                {
+                  backgroundColor: labelColor,
+                  opacity: canSubmit ? 1 : 0.5,
+                },
+              ]}
             >
-              <Text style={[styles.signInLabel, { color: isLight ? '#FFFFFF' : colors.bg }]}>
-                Sign in
-              </Text>
+              {submitting ? (
+                <ActivityIndicator color={isLight ? '#FFFFFF' : colors.bg} />
+              ) : (
+                <Text style={[styles.signInLabel, { color: isLight ? '#FFFFFF' : colors.bg }]}>
+                  {mode === 'signIn' ? 'Sign in' : 'Create account'}
+                </Text>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
               accessibilityRole="button"
-              accessibilityLabel="Sign up"
+              accessibilityLabel={mode === 'signIn' ? 'Switch to sign up' : 'Switch to sign in'}
               activeOpacity={0.6}
-              onPress={continueNext}
+              disabled={submitting}
+              onPress={toggleMode}
               style={styles.signUpRow}
             >
               <Text style={[styles.signUpText, { color: colors.textSecondary }]}>
-                {"Don't have an account? "}
-                <Text style={[styles.signUpLink, { color: labelColor }]}>Sign up</Text>
+                {mode === 'signIn' ? "Don't have an account? " : 'Already have an account? '}
+                <Text style={[styles.signUpLink, { color: labelColor }]}>
+                  {mode === 'signIn' ? 'Sign up' : 'Sign in'}
+                </Text>
               </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.social}>
-            <Text style={[styles.loginWith, { color: colors.textTertiary }]}>Log in with</Text>
-
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="Continue with Apple"
-              activeOpacity={0.85}
-              onPress={continueNext}
-              style={[
-                styles.socialBtn,
-                {
-                  backgroundColor: colors.bgElevated,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <Text style={[styles.socialLabel, { color: labelColor }]}>Continue with Apple</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="Continue with Google"
-              activeOpacity={0.85}
-              onPress={continueNext}
-              style={[
-                styles.socialBtn,
-                {
-                  backgroundColor: colors.bgElevated,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <Text style={[styles.socialLabel, { color: labelColor }]}>Continue with Google</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -199,33 +214,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   signUpLink: {
-    fontWeight: '600',
-  },
-  social: {
-    width: '100%',
-    gap: spacing[12],
-    paddingTop: spacing[32],
-  },
-  loginWith: {
-    ...typography.caption,
-    fontWeight: '600',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-    marginBottom: spacing[4],
-  },
-  socialBtn: {
-    width: '100%',
-    minHeight: 52,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing[16],
-  },
-  socialLabel: {
-    fontSize: 16,
-    lineHeight: 22,
     fontWeight: '600',
   },
 });
