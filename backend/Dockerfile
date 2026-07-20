@@ -28,4 +28,5 @@ USER chief
 EXPOSE 3000
 
 # API runs migrations then HTTP server. Worker skips migrate (API owns that) and runs BullMQ.
-CMD ["sh", "-c", "if [ \"$APP_ROLE\" = \"worker\" ]; then node dist/worker.js; else npx prisma migrate deploy && node dist/main.js; fi"]
+# Set SKIP_PRISMA_MIGRATE=1 when the pooler hangs migrate deploy and schema is already current.
+CMD ["sh", "-c", "if [ \"$APP_ROLE\" = \"worker\" ]; then node dist/worker.js; elif [ \"$SKIP_PRISMA_MIGRATE\" = \"1\" ]; then node dist/main.js; else npx prisma migrate deploy && node dist/main.js; fi"]
