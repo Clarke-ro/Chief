@@ -5,6 +5,7 @@ import { offlineQueue } from '@/services/sync/offlineQueue';
 import { LEGACY_KEYS, workspaceDataKeys } from '@/services/storageKeys';
 import { storage } from '@/services/storage';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { useSessionBootStore } from '@/stores/sessionBoot';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 function sensitiveKeysFor(workspaceId: string): string[] {
@@ -57,6 +58,8 @@ export async function clearUserSession(): Promise<ClearSessionResult> {
     }
     throw error instanceof Error ? error : new Error('Failed to clear local session data.');
   }
+
+  useSessionBootStore.getState().markSignedOut();
 
   return { authCleared };
 }

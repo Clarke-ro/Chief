@@ -4,5 +4,6 @@ export {
   usePreferencesStore,
   type ThemePreference,
 } from './preferences';
+export { ensureSessionBoot, useSessionBootStore } from './sessionBoot';
 export { useWorkspaceContext } from './workspaceContext';
 export { useWorkspaceStore } from './workspaceStore';

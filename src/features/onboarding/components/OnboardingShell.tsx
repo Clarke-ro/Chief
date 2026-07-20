@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useThemeColors } from '@/hooks/useThemeColors';
+import { authSession } from '@/services/api/authSession';
 import { usePreferencesStore } from '@/stores';
 import { radius, spacing, typography } from '@/theme';
 
@@ -80,8 +81,15 @@ export function OnboardingShell({
             accessibilityRole="button"
             accessibilityLabel="Skip to Home"
             onPress={() => {
-              completeOnboarding();
-              router.replace('/home');
+              void (async () => {
+                const signedIn = await authSession.isSignedIn();
+                if (!signedIn) {
+                  router.replace('/onboarding/auth');
+                  return;
+                }
+                completeOnboarding();
+                router.replace('/home');
+              })();
             }}
             hitSlop={12}
             style={({ pressed }) => [{ opacity: pressed ? 0.55 : 1 }]}

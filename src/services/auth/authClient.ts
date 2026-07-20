@@ -26,7 +26,7 @@ function createClient() {
       expoClient({
         scheme: 'chief',
         storagePrefix: 'chief',
-        // Native ExpoSecureStore is unavailable on this Expo Go host — use memory.
+        // Web: localStorage-backed. Native Expo Go: in-memory (SecureStore host unreliable).
         storage: memorySecureStore,
       }),
     ],

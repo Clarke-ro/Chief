@@ -18,6 +18,7 @@ import { OnboardingShell } from '@/features/onboarding/components/OnboardingShel
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { authService, AuthServiceError } from '@/services/auth/authService';
+import { useSessionBootStore } from '@/stores';
 import { radius, spacing, typography } from '@/theme';
 
 type AuthMode = 'signIn' | 'signUp';
@@ -60,11 +61,11 @@ export function AuthScreen() {
     setErrorMessage(null);
     setSubmitting(true);
     try {
-      if (mode === 'signIn') {
-        await authService.signIn(email, password);
-      } else {
-        await authService.signUp({ email, password });
-      }
+      const me =
+        mode === 'signIn'
+          ? await authService.signIn(email, password)
+          : await authService.signUp({ email, password });
+      useSessionBootStore.getState().markSignedIn(me);
       continueNext();
     } catch (error) {
       const message =

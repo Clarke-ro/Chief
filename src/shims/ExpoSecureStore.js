@@ -1,16 +1,43 @@
 /**
- * In-memory SecureStore native module shim for when ExpoSecureStore is missing
- * (broken Expo Go host). Better Auth needs working getItem/setItem or sessions
- * never persist and sign-in appears to succeed then immediately fail.
+ * SecureStore native module shim.
+ * Web: durable localStorage. Native Expo Go: in-memory (host module missing/broken).
  */
-const store = new Map();
+const memory = new Map();
+
+function canUseLocalStorage() {
+  try {
+    return typeof globalThis !== 'undefined' && typeof globalThis.localStorage !== 'undefined';
+  } catch {
+    return false;
+  }
+}
+
+function storageKey(key) {
+  return `chief.secure.${key}`;
+}
 
 function getValueWithKeySync(key) {
-  return store.has(key) ? store.get(key) : null;
+  const k = storageKey(key);
+  if (memory.has(k)) return memory.get(k);
+  if (!canUseLocalStorage()) return null;
+  try {
+    const value = globalThis.localStorage.getItem(k);
+    if (value != null) memory.set(k, value);
+    return value;
+  } catch {
+    return null;
+  }
 }
 
 function setValueWithKeySync(value, key) {
-  store.set(key, value);
+  const k = storageKey(key);
+  memory.set(k, value);
+  if (!canUseLocalStorage()) return;
+  try {
+    globalThis.localStorage.setItem(k, value);
+  } catch {
+    // ignore
+  }
 }
 
 async function getValueWithKeyAsync(key) {
@@ -22,7 +49,14 @@ async function setValueWithKeyAsync(value, key) {
 }
 
 async function deleteValueWithKeyAsync(key) {
-  store.delete(key);
+  const k = storageKey(key);
+  memory.delete(k);
+  if (!canUseLocalStorage()) return;
+  try {
+    globalThis.localStorage.removeItem(k);
+  } catch {
+    // ignore
+  }
 }
 
 const ExpoSecureStore = {

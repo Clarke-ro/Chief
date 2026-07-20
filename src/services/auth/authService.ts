@@ -124,18 +124,33 @@ export const authService = {
   },
 
   async restoreSession(): Promise<MeResponse | null> {
-    const session = await authClient.getSession();
-    if (!session.data?.session) {
+    // Prefer Better Auth cookie/session cache when durable storage still has it.
+    try {
+      const session = await authClient.getSession();
+      if (session.data?.session) {
+        const token = extractToken(session.data);
+        if (token) {
+          await authSession.setTokens({ accessToken: token });
+        }
+        return await authService.bootstrapSession();
+      }
+    } catch {
+      // Fall through to bearer-only restore.
+    }
+
+    // Bearer-only: access token survived refresh even if cookie cache did not.
+    const bearer = await authSession.getAccessToken();
+    if (!bearer) {
       return null;
     }
 
-    const token = extractToken(session.data);
-    if (token) {
-      await authSession.setTokens({ accessToken: token });
-    }
-
     try {
-      return await authService.bootstrapSession();
+      const me = await apiJson<MeResponse>('/v1/me');
+      const primary = me.workspaces[0];
+      if (primary) {
+        persistActiveWorkspaceId(primary.id);
+      }
+      return me;
     } catch {
       await authSession.clear();
       return null;
@@ -144,11 +159,15 @@ export const authService = {
 
   async bootstrapSession(): Promise<MeResponse> {
     const session = await authClient.getSession();
-    if (!session.data?.session) {
+    const bearer = await authSession.getAccessToken();
+    if (!session.data?.session && !bearer) {
       throw new AuthServiceError('Not signed in.');
     }
 
-    await syncBearerFromSession();
+    if (session.data?.session) {
+      await syncBearerFromSession();
+    }
+
     const me = await apiJson<MeResponse>('/v1/me');
     const primary = me.workspaces[0];
     if (primary) {

@@ -1,8 +1,8 @@
 import { memorySecureStore } from '@/services/auth/memorySecureStore';
 
 /**
- * Secrets storage. Uses in-memory store while ExpoSecureStore native module
- * is unavailable (current TestFlight Expo Go host). Soft-fails on errors.
+ * Secrets storage via durable Better Auth store (localStorage on web).
+ * Soft-fails on read errors; never logs token values.
  */
 export const secureStorage = {
   async getItem(key: string): Promise<string | null> {

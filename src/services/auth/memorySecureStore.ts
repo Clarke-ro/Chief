@@ -1,31 +1,36 @@
+import { createDurableKv } from '@/services/durableKv';
+
 /**
- * Better Auth / app storage that works without native SecureStore.
- * Implements both sync and async APIs used by @better-auth/expo.
+ * Better Auth / app secret storage.
+ * Web: durable via localStorage (survives Vercel refresh).
+ * Native Expo Go: in-memory (native SecureStore host is unreliable).
+ *
+ * Implements sync + async APIs used by @better-auth/expo.
  */
-const memory = new Map();
+const kv = createDurableKv();
 
 export const memorySecureStore = {
-  getItem(key) {
-    return memory.has(key) ? memory.get(key) : null;
+  getItem(key: string): string | null {
+    return kv.getItem(key);
   },
 
-  async setItem(key, value) {
-    memory.set(key, String(value));
+  async setItem(key: string, value: string): Promise<void> {
+    kv.setItem(key, String(value));
   },
 
-  async getItemAsync(key) {
+  async getItemAsync(key: string): Promise<string | null> {
     return memorySecureStore.getItem(key);
   },
 
-  async setItemAsync(key, value) {
+  async setItemAsync(key: string, value: string): Promise<void> {
     await memorySecureStore.setItem(key, value);
   },
 
-  async deleteItemAsync(key) {
-    memory.delete(key);
+  async deleteItemAsync(key: string): Promise<void> {
+    kv.removeItem(key);
   },
 
-  deleteItem(key) {
-    memory.delete(key);
+  deleteItem(key: string): void {
+    kv.removeItem(key);
   },
 };

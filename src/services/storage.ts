@@ -1,3 +1,5 @@
+import { createDurableKv } from '@/services/durableKv';
+
 export type KeyValueStorage = {
   getString: (key: string) => string | undefined;
   set: (key: string, value: string) => void;
@@ -5,28 +7,24 @@ export type KeyValueStorage = {
   clearAll: () => void;
 };
 
-function createMemoryStorage(): KeyValueStorage {
-  const map = new Map<string, string>();
-
-  return {
-    getString: (key) => map.get(key),
-    set: (key, value) => {
-      map.set(key, value);
-    },
-    remove: (key) => {
-      map.delete(key);
-    },
-    clearAll: () => {
-      map.clear();
-    },
-  };
-}
+const CHIEF_PREFIX = 'chief.';
 
 /**
- * Expo Go–safe storage.
- * react-native-mmkv v4 (Nitro) is not available in Expo Go and can disturb
- * native module startup if required too early — use in-memory for now.
- *
- * Non-secrets only (theme, day plan, chat seeds). Auth tokens → `secureStorage`.
+ * Non-secret app storage (theme, onboarding flag, workspace-scoped UI data).
+ * Web: durable localStorage. Native Expo Go: in-memory until MMKV is safe.
+ * Auth tokens stay in `secureStorage` / Better Auth store — never here.
  */
-export const storage: KeyValueStorage = createMemoryStorage();
+const kv = createDurableKv();
+
+export const storage: KeyValueStorage = {
+  getString: (key) => kv.getItem(key) ?? undefined,
+  set: (key, value) => {
+    kv.setItem(key, value);
+  },
+  remove: (key) => {
+    kv.removeItem(key);
+  },
+  clearAll: () => {
+    kv.clearPrefix(CHIEF_PREFIX);
+  },
+};
