@@ -28,6 +28,7 @@ import { ensureActiveWorkspaceId } from '@/services/activeWorkspace';
 import { connectIntegration } from '@/services/integrations/connectIntegration';
 import { onboardingRepository, queryKeys } from '@/services';
 import { integrationsRepository } from '@/services/repositories/integrationsRepository';
+import { syncRepository } from '@/services/repositories/syncRepository';
 import { useWorkspaceStore } from '@/stores';
 import { radius, spacing } from '@/theme';
 
@@ -98,7 +99,11 @@ export function ConnectAppsScreen() {
       });
       await queryClient.invalidateQueries({ queryKey: queryKeys.integrations(workspaceId) });
       if (result.ok) {
-        // Onboarding sync enqueues on the API; pull brief again shortly after.
+        try {
+          await syncRepository.runFirstConnection(workspaceId);
+        } catch {
+          // Worker may still pick up the API onboarding enqueue.
+        }
         void useWorkspaceStore.getState().refreshBrief();
         return;
       }

@@ -6,3 +6,4 @@ export { analyticsRepository } from './analyticsRepository';
 export { chiefRepository } from './chiefRepository';
 export { onboardingRepository } from './onboardingRepository';
 export { integrationsRepository } from './integrationsRepository';
+export { syncRepository } from './syncRepository';

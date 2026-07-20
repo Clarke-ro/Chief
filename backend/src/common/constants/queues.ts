@@ -10,12 +10,12 @@ export const Queues = {
 
 export type QueueName = (typeof Queues)[keyof typeof Queues];
 
-/** Repeatable / scheduled job ids (stable across deploys). */
+/** Repeatable / scheduled job ids (stable across deploys). BullMQ forbids `:` in custom ids. */
 export const ScheduledJobs = {
-  SYNC_DUE_ACCOUNTS: 'sync:due-accounts',
-  BRIEFING_MORNING: 'briefing:morning',
-  ANALYTICS_DAILY: 'analytics:daily',
-  NOTIFICATIONS_DIGEST: 'notifications:digest',
+  SYNC_DUE_ACCOUNTS: 'sync-due-accounts',
+  BRIEFING_MORNING: 'briefing-morning',
+  ANALYTICS_DAILY: 'analytics-daily',
+  NOTIFICATIONS_DIGEST: 'notifications-digest',
 } as const;
 
 export type SyncJobName =

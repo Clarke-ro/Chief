@@ -399,7 +399,8 @@ export class OAuthService {
           connectedAccountId,
           reason: 'onboarding',
         },
-        { jobId: `sync:${connectedAccountId}:account:onboarding` },
+        // BullMQ custom job ids cannot contain `:`.
+        { jobId: `sync-${connectedAccountId}-account-onboarding` },
       );
     } catch (error) {
       this.logger.warn(

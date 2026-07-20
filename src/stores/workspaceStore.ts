@@ -8,6 +8,7 @@ import { applyDueScheduleLogic } from '@/features/tasks/scheduleSweep';
 import { sortDayPlan } from '@/features/tasks/scheduleUtils';
 import type { DayPlanItem, DayPlanStatus, ScheduleBlockKind, SweepPhase } from '@/features/tasks/types';
 import type { WorkspaceId } from '@/config/workspace';
+import { env } from '@/config/env';
 import {
   analyticsRepository,
   briefRepository,
@@ -228,7 +229,8 @@ function syncProgress(
   analytics: AnalyticsSnapshot,
   dayPlan: DayPlanItem[],
 ): Pick<WorkspaceState, 'brief' | 'analytics'> {
-  if (dayPlan.length === 0) {
+  // Live brief owns score/copy — don't overwrite with mock day-plan heuristics.
+  if (env.liveHomeBrief || dayPlan.length === 0) {
     return { brief, analytics };
   }
   const completed = dayPlan.filter((item) => item.status === 'completed').length;

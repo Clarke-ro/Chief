@@ -1,5 +1,5 @@
-import { Bell, ChevronRight, Search as SearchIcon } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Bell, ChevronRight, Inbox, Search as SearchIcon } from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Platform,
@@ -13,9 +13,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { dispatchFocusAction } from '@/features/actions';
+import { EmptyState, SearchBar } from '@/components/ui';
 import { PlatformLogo, platformLabels, type PlatformId } from '@/components/ui/PlatformLogo';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
-import { SearchBar } from '@/components/ui';
 import { BriefingSignalRow } from '@/features/brief/components/BriefingSignalRow';
 import { FocusRow } from '@/features/brief/components/FocusRow';
 import { Greeting } from '@/features/brief/components/Greeting';
@@ -25,7 +25,8 @@ import type { FocusAction } from '@/features/brief/types';
 import { env } from '@/config/env';
 import { useMountedRef } from '@/hooks/useMountedRef';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { workspaceNav } from '@/services';
+import { ensureActiveWorkspaceId, workspaceNav } from '@/services';
+import { syncRepository } from '@/services/repositories/syncRepository';
 import { useSessionBootStore, useWorkspaceStore } from '@/stores';
 import { fontFamily, radius, spacing, typography } from '@/theme';
 
@@ -65,10 +66,31 @@ export function HomeScreen() {
   const dateLabel = useMemo(() => formatTodayLabel(), []);
   const briefingGroups = useMemo(() => groupByPlatform(brief.briefing), [brief.briefing]);
 
+  const kickedSync = useRef(false);
+
   useEffect(() => {
     if (!env.liveHomeBrief || !sessionReady || !hasSession) return;
     void refreshBrief();
   }, [hasSession, refreshBrief, sessionReady]);
+
+  // If Google connected but onboarding sync never ran (empty live brief), kick sync once.
+  useEffect(() => {
+    if (!env.liveHomeBrief || !sessionReady || !hasSession || kickedSync.current) return;
+    if (brief.focus.length > 0 || brief.briefing.length > 0) return;
+    kickedSync.current = true;
+    void (async () => {
+      try {
+        const workspaceId = await ensureActiveWorkspaceId();
+        const started = await syncRepository.runFirstConnection(workspaceId);
+        if (started) {
+          await new Promise((r) => setTimeout(r, 4000));
+          await refreshBrief();
+        }
+      } catch {
+        // Keep empty state — user can pull to refresh later.
+      }
+    })();
+  }, [brief.briefing.length, brief.focus.length, hasSession, refreshBrief, sessionReady]);
 
   const openFocus = useCallback((id: string) => {
     workspaceNav.focus(id);
@@ -215,97 +237,123 @@ export function HomeScreen() {
 
           <View style={[styles.section, { borderBottomColor: colors.borderSubtle }]}>
             <HomeSection showHeader={false}>
-              <View style={styles.focusGroups}>
-                {brief.focus.map((item, index) => (
-                  <View
-                    key={item.id}
-                    style={[
-                      styles.focusRow,
-                      index < brief.focus.length - 1 && {
-                        borderBottomWidth: StyleSheet.hairlineWidth,
-                        borderBottomColor: colors.border,
-                        paddingBottom: spacing[16],
-                        marginBottom: spacing[16],
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[styles.focusNumber, { color: colors.priority[item.priority] }]}
-                      accessibilityLabel={`Priority ${index + 1}`}
+              {brief.focus.length === 0 ? (
+                <EmptyState
+                  icon={Inbox}
+                  title="No priorities yet"
+                  description={
+                    env.liveHomeBrief
+                      ? 'Connect Google and wait for sync — or pull to refresh once mail and calendar land.'
+                      : 'Your focus list will show up here.'
+                  }
+                  actionLabel={env.liveHomeBrief ? 'Open Profile' : undefined}
+                  onAction={env.liveHomeBrief ? () => workspaceNav.profile() : undefined}
+                />
+              ) : (
+                <View style={styles.focusGroups}>
+                  {brief.focus.map((item, index) => (
+                    <View
+                      key={item.id}
+                      style={[
+                        styles.focusRow,
+                        index < brief.focus.length - 1 && {
+                          borderBottomWidth: StyleSheet.hairlineWidth,
+                          borderBottomColor: colors.border,
+                          paddingBottom: spacing[16],
+                          marginBottom: spacing[16],
+                        },
+                      ]}
                     >
-                      {index + 1}
-                    </Text>
-                    <View style={styles.focusCard}>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Open details for ${item.title}`}
-                        onPress={() => openFocus(item.id)}
+                      <Text
+                        style={[styles.focusNumber, { color: colors.priority[item.priority] }]}
+                        accessibilityLabel={`Priority ${index + 1}`}
                       >
-                        <View style={styles.focusHeader}>
-                          <PlatformLogo platform={item.platform} size={26} />
-                          <View style={styles.focusCopy}>
-                            <View style={styles.focusMeta}>
-                              <Text
-                                style={[styles.focusApp, { color: colors.textSecondary }]}
-                                numberOfLines={1}
-                              >
-                                {platformLabels[item.platform]}
-                              </Text>
-                              <View style={styles.focusMetaTrailing}>
-                                <PriorityBadge priority={item.priority} size="sm" />
+                        {index + 1}
+                      </Text>
+                      <View style={styles.focusCard}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open details for ${item.title}`}
+                          onPress={() => openFocus(item.id)}
+                        >
+                          <View style={styles.focusHeader}>
+                            <PlatformLogo platform={item.platform} size={26} />
+                            <View style={styles.focusCopy}>
+                              <View style={styles.focusMeta}>
                                 <Text
-                                  style={[styles.focusTime, { color: colors.textTertiary }]}
+                                  style={[styles.focusApp, { color: colors.textSecondary }]}
                                   numberOfLines={1}
                                 >
-                                  {item.estimatedTime}
+                                  {platformLabels[item.platform]}
                                 </Text>
+                                <View style={styles.focusMetaTrailing}>
+                                  <PriorityBadge priority={item.priority} size="sm" />
+                                  <Text
+                                    style={[styles.focusTime, { color: colors.textTertiary }]}
+                                    numberOfLines={1}
+                                  >
+                                    {item.estimatedTime}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.focusTitleRow}>
+                                <Text
+                                  style={[styles.focusTitle, { color: colors.text }]}
+                                  numberOfLines={1}
+                                >
+                                  {item.title}
+                                </Text>
+                                <ChevronRight size={14} color={colors.textTertiary} strokeWidth={2} />
                               </View>
                             </View>
-                            <View style={styles.focusTitleRow}>
-                              <Text
-                                style={[styles.focusTitle, { color: colors.text }]}
-                                numberOfLines={1}
-                              >
-                                {item.title}
-                              </Text>
-                              <ChevronRight size={14} color={colors.textTertiary} strokeWidth={2} />
-                            </View>
                           </View>
+                        </Pressable>
+                        <View style={styles.focusThread}>
+                          <FocusRow
+                            item={item}
+                            onPress={() => openFocus(item.id)}
+                            onActionPress={(action) => onFocusAction(item.id, action)}
+                          />
                         </View>
-                      </Pressable>
-                      <View style={styles.focusThread}>
-                        <FocusRow
-                          item={item}
-                          onPress={() => openFocus(item.id)}
-                          onActionPress={(action) => onFocusAction(item.id, action)}
-                        />
                       </View>
                     </View>
-                  </View>
-                ))}
-              </View>
+                  ))}
+                </View>
+              )}
             </HomeSection>
           </View>
 
           <View>
             <HomeSection title="Today's brief">
-              <View style={styles.briefingGroups}>
-                {briefingGroups.map((group) => (
-                  <View key={group.platform}>
-                    <View style={styles.groupHeader}>
-                      <PlatformLogo platform={group.platform} size={32} />
-                      <Text style={[styles.groupTitle, { color: colors.text }]}>
-                        {platformLabels[group.platform]}
-                      </Text>
+              {brief.briefing.length === 0 ? (
+                <EmptyState
+                  icon={Inbox}
+                  title="Brief is quiet"
+                  description={
+                    env.liveHomeBrief
+                      ? 'Unread mail and today’s calendar events will appear here after sync.'
+                      : 'Briefing signals will show up here.'
+                  }
+                />
+              ) : (
+                <View style={styles.briefingGroups}>
+                  {briefingGroups.map((group) => (
+                    <View key={group.platform}>
+                      <View style={styles.groupHeader}>
+                        <PlatformLogo platform={group.platform} size={32} />
+                        <Text style={[styles.groupTitle, { color: colors.text }]}>
+                          {platformLabels[group.platform]}
+                        </Text>
+                      </View>
+                      <View style={[styles.thread, { borderLeftColor: colors.border }]}>
+                        {group.items.map((signal) => (
+                          <BriefingSignalRow key={signal.id} item={signal} />
+                        ))}
+                      </View>
                     </View>
-                    <View style={[styles.thread, { borderLeftColor: colors.border }]}>
-                      {group.items.map((signal) => (
-                        <BriefingSignalRow key={signal.id} item={signal} />
-                      ))}
-                    </View>
-                  </View>
-                ))}
-              </View>
+                  ))}
+                </View>
+              )}
             </HomeSection>
           </View>
         </View>

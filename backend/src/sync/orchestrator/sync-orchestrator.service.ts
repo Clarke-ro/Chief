@@ -241,12 +241,13 @@ export class SyncOrchestratorService {
   }
 }
 
+/** BullMQ custom job ids cannot contain `:`. */
 function dedupeId(
   connectedAccountId: string,
   resource: string,
   reason: string,
 ) {
-  return `sync:${connectedAccountId}:${resource}:${reason}`;
+  return `sync-${connectedAccountId}-${resource}-${reason}`;
 }
 
 function normalizeReason(reason?: string): SyncReason {
