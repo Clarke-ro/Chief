@@ -39,11 +39,21 @@ export const env = {
   /** Supabase anon / public key only — never the service_role key. */
   supabaseAnonKey: trimPublic(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY),
 
+  /**
+   * When true (and API is configured), Home pulls `/v1/workspace/brief`.
+   * Failures fall back to the mock seed brief.
+   */
+  liveHomeBriefFlag: trimPublic(process.env.EXPO_PUBLIC_LIVE_HOME_BRIEF) === 'true',
+
   get isApiConfigured(): boolean {
     return Boolean(this.apiBaseUrl);
   },
 
   get isSupabaseConfigured(): boolean {
     return Boolean(this.supabaseUrl && this.supabaseAnonKey);
+  },
+
+  get liveHomeBrief(): boolean {
+    return this.liveHomeBriefFlag && this.isApiConfigured;
   },
 } as const;

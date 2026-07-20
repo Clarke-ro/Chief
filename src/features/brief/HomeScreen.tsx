@@ -1,5 +1,5 @@
 import { Bell, ChevronRight, Search as SearchIcon } from 'lucide-react-native';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Platform,
@@ -22,10 +22,11 @@ import { Greeting } from '@/features/brief/components/Greeting';
 import { HomeSection } from '@/features/brief/components/HomeSection';
 import { SuccessScore } from '@/features/brief/components/SuccessScore';
 import type { FocusAction } from '@/features/brief/types';
+import { env } from '@/config/env';
 import { useMountedRef } from '@/hooks/useMountedRef';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { workspaceNav } from '@/services';
-import { useWorkspaceStore } from '@/stores';
+import { useSessionBootStore, useWorkspaceStore } from '@/stores';
 import { fontFamily, radius, spacing, typography } from '@/theme';
 
 function formatTodayLabel(date = new Date()): string {
@@ -53,6 +54,8 @@ export function HomeScreen() {
   const mounted = useMountedRef();
   const brief = useWorkspaceStore((s) => s.brief);
   const refreshBrief = useWorkspaceStore((s) => s.refreshBrief);
+  const hasSession = useSessionBootStore((s) => s.hasSession);
+  const sessionReady = useSessionBootStore((s) => s.ready);
   const notificationCount = useWorkspaceStore(
     (s) => s.profile.notifications.filter((n) => n.enabled).length,
   );
@@ -61,6 +64,11 @@ export function HomeScreen() {
   const [showSearch, setShowSearch] = useState(false);
   const dateLabel = useMemo(() => formatTodayLabel(), []);
   const briefingGroups = useMemo(() => groupByPlatform(brief.briefing), [brief.briefing]);
+
+  useEffect(() => {
+    if (!env.liveHomeBrief || !sessionReady || !hasSession) return;
+    void refreshBrief();
+  }, [hasSession, refreshBrief, sessionReady]);
 
   const openFocus = useCallback((id: string) => {
     workspaceNav.focus(id);

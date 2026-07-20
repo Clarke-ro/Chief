@@ -279,14 +279,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   profile: initialProfile,
 
   refreshBrief: async () => {
-    await new Promise((resolve) => setTimeout(resolve, 900));
     const { profile, dayPlan, analytics } = get();
-    const next = withProfileName(briefRepository.getHomeBrief(), profile);
-    const bumped = {
-      ...next,
-      successScore: Math.min(0.98, next.successScore + 0.01),
-    };
-    const synced = syncProgress(bumped, analytics, dayPlan);
+    const loaded = await briefRepository.fetchHomeBrief();
+    const next = withProfileName(loaded, profile);
+    const synced = syncProgress(next, analytics, dayPlan);
     set({ brief: synced.brief, analytics: synced.analytics });
   },
 
