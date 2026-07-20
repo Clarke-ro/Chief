@@ -11,7 +11,7 @@ export class ConnectIntegrationDto {
 
   @ApiPropertyOptional({
     description:
-      'App deep link to open after OAuth (chief://, exp://, or exps://). Stored in OAuth state.',
+      'Post-OAuth return URL: chief:// / exp:// / exps:// app callbacks, or an https origin listed in CORS_ORIGINS (e.g. Vercel /integrations/callback).',
   })
   @IsOptional()
   @IsString()

@@ -4,13 +4,17 @@ import * as WebBrowser from 'expo-web-browser';
 import type { BackendIntegrationProvider } from '@/config/integrations/providerMap';
 import { ensureActiveWorkspaceId, isWorkspaceUuid } from '@/services/activeWorkspace';
 import { ApiError } from '@/services/api/client';
+import { getIntegrationReturnTo } from '@/services/integrations/integrationReturnTo';
 import { integrationsRepository } from '@/services/repositories/integrationsRepository';
 
 export type ConnectIntegrationResult =
   | { ok: true; provider: BackendIntegrationProvider }
   | { ok: false; reason: 'cancelled' | 'failed'; message?: string };
 
-const APP_CALLBACK_PATH = 'integrations/callback';
+export type ConnectIntegrationOptions = {
+  /** In-app path to open after OAuth callback (web full-page return). */
+  next?: string;
+};
 
 async function isProviderConnected(
   provider: BackendIntegrationProvider,
@@ -27,11 +31,13 @@ async function isProviderConnected(
 }
 
 /**
- * Opens the provider OAuth page and waits for the app deep link callback.
+ * Opens the provider OAuth page and waits for the app callback.
+ * Web: HTTPS returnTo on the current origin (Vercel). Native: chief:// / exp://.
  */
 export async function connectIntegration(
   provider: BackendIntegrationProvider,
   workspaceId?: string,
+  options?: ConnectIntegrationOptions,
 ): Promise<ConnectIntegrationResult> {
   let resolvedWorkspaceId: string;
   try {
@@ -45,7 +51,7 @@ export async function connectIntegration(
     };
   }
 
-  const redirectUrl = Linking.createURL(APP_CALLBACK_PATH);
+  const redirectUrl = getIntegrationReturnTo(options?.next);
 
   let authorizeUrl: string;
   try {

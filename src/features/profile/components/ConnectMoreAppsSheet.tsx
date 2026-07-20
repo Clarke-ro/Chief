@@ -46,7 +46,9 @@ export function ConnectMoreAppsSheet({
     if (connectingId) return;
     setConnectingId(appId);
     try {
-      const result = await connectIntegration(provider, workspaceId);
+      const result = await connectIntegration(provider, workspaceId, {
+        next: '/profile',
+      });
       await onConnected();
       if (result.ok) {
         return;

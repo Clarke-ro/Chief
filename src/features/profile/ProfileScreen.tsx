@@ -121,7 +121,9 @@ export function ProfileScreen() {
     async (provider: BackendIntegrationProvider, appId: string) => {
       setBusyAppId(appId);
       try {
-        const result = await connectIntegration(provider, workspaceId);
+        const result = await connectIntegration(provider, workspaceId, {
+          next: '/profile',
+        });
         await invalidateIntegrations();
         if (!result.ok && result.reason === 'failed' && result.message) {
           Alert.alert('Connect failed', result.message);

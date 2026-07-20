@@ -399,7 +399,8 @@ export class OAuthService {
   }
 
   /**
-   * Only allow app callback deep links we control (blocks open redirects).
+   * Only allow app callback deep links / web origins we control (blocks open redirects).
+   * Accepts chief:// / exp:// / exps:// and http(s) origins listed in CORS_ORIGINS.
    */
   private sanitizeReturnTo(returnTo?: string): string | undefined {
     if (!returnTo || returnTo.length > 512) {
@@ -407,18 +408,33 @@ export class OAuthService {
     }
     try {
       const url = new URL(returnTo);
+      const callbackPath = `${url.hostname}${url.pathname}`;
+
       if (
-        url.protocol !== 'chief:' &&
-        url.protocol !== 'exp:' &&
-        url.protocol !== 'exps:'
+        url.protocol === 'chief:' ||
+        url.protocol === 'exp:' ||
+        url.protocol === 'exps:'
       ) {
-        return undefined;
+        if (!callbackPath.includes('integrations/callback')) {
+          return undefined;
+        }
+        return returnTo.split('#')[0];
       }
-      const path = `${url.hostname}${url.pathname}`;
-      if (!path.includes('integrations/callback')) {
-        return undefined;
+
+      if (url.protocol === 'https:' || url.protocol === 'http:') {
+        const allowedOrigins = this.config.corsOrigins.filter((origin) =>
+          origin.startsWith('http://') || origin.startsWith('https://'),
+        );
+        if (!allowedOrigins.includes(url.origin)) {
+          return undefined;
+        }
+        if (!url.pathname.includes('/integrations/callback')) {
+          return undefined;
+        }
+        return returnTo.split('#')[0];
       }
-      return returnTo.split('#')[0];
+
+      return undefined;
     } catch {
       return undefined;
     }

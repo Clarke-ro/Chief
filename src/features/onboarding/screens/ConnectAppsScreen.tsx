@@ -92,7 +92,9 @@ export function ConnectAppsScreen() {
 
     setConnectingAppId(appId);
     try {
-      const result = await connectIntegration(provider, workspaceId);
+      const result = await connectIntegration(provider, workspaceId, {
+        next: '/onboarding/connect',
+      });
       await queryClient.invalidateQueries({ queryKey: queryKeys.integrations(workspaceId) });
       if (result.ok) {
         return;

@@ -35,6 +35,7 @@ export default function RootLayout() {
           >
             <Stack.Screen name="index" />
             <Stack.Screen name="onboarding" options={{ animation: 'fade', gestureEnabled: false }} />
+            <Stack.Screen name="integrations/callback" options={{ animation: 'fade', gestureEnabled: false }} />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen
               name="focus/[id]"
