@@ -30,7 +30,10 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files — never commit secrets
+.env
+.env.*
+!.env.example
 .env*.local
 
 # typescript
@@ -39,3 +42,12 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Local agent / IDE tooling — not part of the app
+.cursor/
+.claude/
+docs/
+
+# Project-understanding / agent instruction docs (keep local only)
+AGENTS.md
+CLAUDE.md
