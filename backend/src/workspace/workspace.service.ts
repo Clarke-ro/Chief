@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { MembershipRole } from '@prisma/client';
+import { MembershipRole, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import type { AuthUser } from '../auth/decorators/current-user.decorator';
 
@@ -41,25 +41,39 @@ export class WorkspaceService {
     const slug = await this.uniqueSlug(baseSlug);
     const name = `${user.name?.split(' ')[0] || 'My'}'s Workspace`;
 
-    const workspace = await this.prisma.workspace.create({
-      data: {
-        name,
-        slug,
-        memberships: {
-          create: {
-            userId: user.id,
-            role: MembershipRole.owner,
+    try {
+      const workspace = await this.prisma.workspace.create({
+        data: {
+          name,
+          slug,
+          memberships: {
+            create: {
+              userId: user.id,
+              role: MembershipRole.owner,
+            },
           },
         },
-      },
-    });
+      });
 
-    return {
-      id: workspace.id,
-      name: workspace.name,
-      slug: workspace.slug,
-      role: MembershipRole.owner,
-    };
+      return {
+        id: workspace.id,
+        name: workspace.name,
+        slug: workspace.slug,
+        role: MembershipRole.owner,
+      };
+    } catch (error) {
+      // Parallel first-login races: unique slug or concurrent membership create.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const again = await this.listForUser(user.id);
+        if (again[0]) {
+          return again[0];
+        }
+      }
+      throw error;
+    }
   }
 
   async assertMembership(userId: string, workspaceId: string) {
@@ -72,17 +86,21 @@ export class WorkspaceService {
   }
 
   private slugify(input: string): string {
-    return input
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 40) || 'workspace';
+    return (
+      input
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 40) || 'workspace'
+    );
   }
 
   private async uniqueSlug(base: string): Promise<string> {
     let candidate = base;
     let i = 0;
-    while (await this.prisma.workspace.findUnique({ where: { slug: candidate } })) {
+    while (
+      await this.prisma.workspace.findUnique({ where: { slug: candidate } })
+    ) {
       i += 1;
       candidate = `${base}-${i}`;
     }

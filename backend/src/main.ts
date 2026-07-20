@@ -24,6 +24,9 @@ async function bootstrap() {
   const expressApp = app.getHttpAdapter().getInstance() as express.Express;
   const auth = app.get<BetterAuthInstance>(BETTER_AUTH);
 
+  // Railway / reverse proxies terminate TLS in front of the app.
+  expressApp.set('trust proxy', 1);
+
   // Better Auth Expo: copy expo-origin → origin for native clients (Expo Go sends no Origin header).
   expressApp.use('/api/auth', (req, _res, next) => {
     if (!req.headers.origin && req.headers['expo-origin']) {
@@ -40,8 +43,9 @@ async function bootstrap() {
   expressApp.use(express.urlencoded({ extended: true }));
 
   app.use(helmet());
+  // Never reflect arbitrary Origin with credentials — allowlist only.
   app.enableCors({
-    origin: config.corsOrigins.includes('*') ? true : config.corsOrigins,
+    origin: config.corsOrigins,
     credentials: true,
     allowedHeaders: [
       'Content-Type',
@@ -72,7 +76,7 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
-  app.useGlobalFilters(new AllExceptionsFilter());
+  app.useGlobalFilters(new AllExceptionsFilter(config.isProduction));
 
   if (config.swaggerEnabled) {
     const swaggerConfig = new DocumentBuilder()

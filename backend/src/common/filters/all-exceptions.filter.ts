@@ -21,6 +21,8 @@ type ErrorBody = {
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
 
+  constructor(private readonly isProduction = false) {}
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -50,8 +52,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
       };
       message = body.message ?? message;
       error = body.error ?? error;
-    } else if (exception instanceof Error) {
+    } else if (exception instanceof Error && !this.isProduction) {
       message = exception.message;
+    }
+
+    // Never leak raw stack/provider/Prisma details to clients in production 500s.
+    if (this.isProduction && status >= 500) {
+      message = 'Internal server error';
     }
 
     const body: ErrorBody = {

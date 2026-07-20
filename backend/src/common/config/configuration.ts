@@ -84,6 +84,11 @@ export function buildConfiguration(env: Env): AppConfig {
       },
     },
     logLevel: env.LOG_LEVEL,
-    swaggerEnabled: env.SWAGGER_ENABLED,
+    swaggerEnabled:
+      env.SWAGGER_ENABLED === 'true'
+        ? true
+        : env.SWAGGER_ENABLED === 'false'
+          ? false
+          : env.NODE_ENV !== 'production',
   };
 }

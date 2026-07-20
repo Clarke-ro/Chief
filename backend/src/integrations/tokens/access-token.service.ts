@@ -6,10 +6,12 @@ import {
 } from '@nestjs/common';
 import { ConnectedAccountStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { RedisService } from '../../common/redis/redis.service';
 import { ProviderRegistry } from '../providers/provider.registry';
 import { TokenVaultService } from './token-vault.service';
 
 const EXPIRY_SKEW_MS = 60_000;
+const REFRESH_LOCK_TTL_SEC = 20;
 
 /**
  * Resolves a valid access token for a connected account, refreshing when needed.
@@ -23,6 +25,7 @@ export class AccessTokenService {
     private readonly prisma: PrismaService,
     private readonly registry: ProviderRegistry,
     private readonly vault: TokenVaultService,
+    private readonly redis: RedisService,
   ) {}
 
   async getValidAccessToken(connectedAccountId: string): Promise<string> {
@@ -48,6 +51,27 @@ export class AccessTokenService {
       throw new UnauthorizedException({
         message: 'Reauthentication required',
         code: 'NEEDS_REAUTH',
+        connectedAccountId: account.id,
+      });
+    }
+
+    const lockKey = `token:refresh:${account.id}`;
+    const acquired = await this.redis.setNx(lockKey, '1', REFRESH_LOCK_TTL_SEC);
+    if (!acquired) {
+      // Another refresh is in flight — reload; if still expired, fail soft.
+      const reloaded = await this.prisma.connectedAccount.findUnique({
+        where: { id: account.id },
+      });
+      if (
+        reloaded &&
+        reloaded.tokenExpiresAt &&
+        reloaded.tokenExpiresAt.getTime() > Date.now() + EXPIRY_SKEW_MS
+      ) {
+        return this.vault.open(reloaded.encryptedTokens).accessToken;
+      }
+      throw new UnauthorizedException({
+        message: 'Token refresh in progress; retry shortly',
+        code: 'REFRESH_IN_PROGRESS',
         connectedAccountId: account.id,
       });
     }
@@ -80,6 +104,8 @@ export class AccessTokenService {
         code: 'NEEDS_REAUTH',
         connectedAccountId: account.id,
       });
+    } finally {
+      await this.redis.del(lockKey).catch(() => 0);
     }
   }
 

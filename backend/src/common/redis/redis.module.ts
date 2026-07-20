@@ -16,6 +16,8 @@ import { RedisService } from './redis.service';
           maxRetriesPerRequest: null,
           enableReadyCheck: true,
           lazyConnect: false,
+          connectTimeout: 10_000,
+          commandTimeout: 5_000,
         });
 
         client.on('connect', () => logger.log('Redis connecting'));

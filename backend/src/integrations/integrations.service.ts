@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConnectedAccountStatus, IntegrationProvider } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { MembershipService } from '../membership/membership.service';
@@ -20,7 +24,9 @@ export class IntegrationsService {
   ) {}
 
   async listCatalogAndConnections(user: AuthUser, workspaceId?: string) {
-    const wsId = await this.resolveWorkspaceId(user, workspaceId);
+    const wsId = await this.resolveWorkspaceId(user, workspaceId, {
+      allowFallback: true,
+    });
     await this.membership.requireMembership(user.id, wsId);
 
     const providers = this.registry.listDefinitions();
@@ -67,8 +73,7 @@ export class IntegrationsService {
     workspaceId: string,
     returnTo?: string,
   ) {
-    const wsId = await this.resolveWorkspaceId(user, workspaceId);
-    await this.membership.requireMembership(user.id, wsId);
+    const wsId = await this.requireWorkspaceId(user, workspaceId);
     const provider = this.registry.parseProvider(providerParam);
     return this.oauth.startConnect({
       provider,
@@ -83,10 +88,10 @@ export class IntegrationsService {
     connectedAccountId: string,
     workspaceId: string,
   ) {
-    await this.membership.requireMembership(user.id, workspaceId);
+    const wsId = await this.requireWorkspaceId(user, workspaceId);
     await this.oauth.disconnect({
       connectedAccountId,
-      workspaceId,
+      workspaceId: wsId,
       userId: user.id,
     });
     return { ok: true };
@@ -96,12 +101,14 @@ export class IntegrationsService {
     user: AuthUser,
     connectedAccountId: string,
     workspaceId: string,
+    returnTo?: string,
   ) {
-    await this.membership.requireMembership(user.id, workspaceId);
+    const wsId = await this.requireWorkspaceId(user, workspaceId);
     return this.oauth.startReconnect({
       connectedAccountId,
-      workspaceId,
+      workspaceId: wsId,
       userId: user.id,
+      returnTo,
     });
   }
 
@@ -110,9 +117,9 @@ export class IntegrationsService {
     connectedAccountId: string,
     workspaceId: string,
   ) {
-    await this.membership.requireMembership(user.id, workspaceId);
+    const wsId = await this.requireWorkspaceId(user, workspaceId);
     const account = await this.prisma.connectedAccount.findFirst({
-      where: { id: connectedAccountId, workspaceId },
+      where: { id: connectedAccountId, workspaceId: wsId },
     });
     if (!account) {
       throw new NotFoundException('Connected account not found');
@@ -125,8 +132,8 @@ export class IntegrationsService {
     connectedAccountId: string,
     workspaceId: string,
   ) {
-    await this.membership.requireMembership(user.id, workspaceId);
-    return this.health.check(connectedAccountId, workspaceId);
+    const wsId = await this.requireWorkspaceId(user, workspaceId);
+    return this.health.check(connectedAccountId, wsId);
   }
 
   handleOAuthCallback(
@@ -152,7 +159,9 @@ export class IntegrationsService {
     const id = value.trim();
     if (!id || id === 'default') return false;
     if (
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        id,
+      )
     ) {
       return true;
     }
@@ -160,9 +169,25 @@ export class IntegrationsService {
     return /^c[a-z0-9]{20,}$/i.test(id);
   }
 
-  private async resolveWorkspaceId(user: AuthUser, workspaceId?: string) {
+  /** Explicit workspace for mutating integration ops — never silently remap. */
+  private async requireWorkspaceId(user: AuthUser, workspaceId: string) {
+    if (!this.isValidWorkspaceId(workspaceId)) {
+      throw new BadRequestException('Invalid workspaceId');
+    }
+    await this.membership.requireMembership(user.id, workspaceId.trim());
+    return workspaceId.trim();
+  }
+
+  private async resolveWorkspaceId(
+    user: AuthUser,
+    workspaceId: string | undefined,
+    options: { allowFallback: boolean },
+  ) {
     if (workspaceId && this.isValidWorkspaceId(workspaceId)) {
-      return workspaceId;
+      return workspaceId.trim();
+    }
+    if (workspaceId && !options.allowFallback) {
+      throw new BadRequestException('Invalid workspaceId');
     }
     const list = await this.workspaces.listForUser(user.id);
     if (list[0]) {

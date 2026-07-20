@@ -32,7 +32,8 @@ export class OAuthService {
 
   buildRedirectUri(provider: IntegrationProvider): string {
     const base = this.config.oauth.redirectBaseUrl.replace(/\/$/, '');
-    return `${base}/v1/integrations/oauth/${provider}/callback`;
+    const prefix = this.config.apiPrefix.replace(/^\/|\/$/g, '');
+    return `${base}/${prefix}/integrations/oauth/${provider}/callback`;
   }
 
   async startConnect(input: {
@@ -68,7 +69,7 @@ export class OAuthService {
       redirectUri,
     });
 
-    await this.audit.append({
+    await this.safeAudit({
       action: 'integration.connect.start',
       workspaceId: input.workspaceId,
       actorUserId: input.userId,
@@ -89,7 +90,7 @@ export class OAuthService {
     if (input.error || !input.code || !input.state) {
       return {
         redirectUrl: this.errorRedirect(
-          input.errorDescription ?? input.error ?? 'oauth_denied',
+          'oauth_denied',
           input.provider,
         ),
       };
@@ -122,46 +123,21 @@ export class OAuthService {
         | Prisma.InputJsonValue
         | undefined;
 
-      const account = await this.prisma.connectedAccount.upsert({
-        where: {
-          workspaceId_provider_providerAccountId: {
-            workspaceId: pending.workspaceId,
-            provider: input.provider,
-            providerAccountId: profile.providerAccountId,
-          },
-        },
-        create: {
-          workspaceId: pending.workspaceId,
-          userId: pending.userId,
-          provider: input.provider,
+      const account = await this.persistConnectedAccount({
+        pending,
+        provider: input.provider,
+        profile: {
           providerAccountId: profile.providerAccountId,
-          displayName: profile.displayName,
-          email: profile.email,
-          status: ConnectedAccountStatus.active,
-          scopes,
-          encryptedTokens,
-          tokenExpiresAt: tokens.expiresAt,
-          metadata,
-          lastHealthCheckAt: new Date(),
-          lastHealthOk: true,
+          displayName: profile.displayName ?? null,
+          email: profile.email ?? null,
         },
-        update: {
-          userId: pending.userId,
-          displayName: profile.displayName,
-          email: profile.email,
-          status: ConnectedAccountStatus.active,
-          scopes,
-          encryptedTokens,
-          tokenExpiresAt: tokens.expiresAt,
-          metadata,
-          revokedAt: null,
-          lastHealthCheckAt: new Date(),
-          lastHealthOk: true,
-          lastHealthMessage: null,
-        },
+        scopes,
+        encryptedTokens,
+        tokenExpiresAt: tokens.expiresAt,
+        metadata,
       });
 
-      await this.audit.append({
+      await this.safeAudit({
         action: 'integration.connect.success',
         workspaceId: pending.workspaceId,
         actorUserId: pending.userId,
@@ -181,7 +157,7 @@ export class OAuthService {
         { err: error, provider: input.provider },
         'OAuth callback failed',
       );
-      await this.audit.append({
+      await this.safeAudit({
         action: 'integration.connect.failure',
         workspaceId: pending.workspaceId,
         actorUserId: pending.userId,
@@ -192,7 +168,7 @@ export class OAuthService {
       });
       return {
         redirectUrl: this.errorRedirect(
-          error instanceof Error ? error.message : 'oauth_failed',
+          this.toPublicOAuthError(error),
           input.provider,
           clientReturnTo,
         ),
@@ -240,7 +216,7 @@ export class OAuthService {
       },
     });
 
-    await this.audit.append({
+    await this.safeAudit({
       action: 'integration.disconnect',
       workspaceId: input.workspaceId,
       actorUserId: input.userId,
@@ -253,6 +229,7 @@ export class OAuthService {
     connectedAccountId: string;
     workspaceId: string;
     userId: string;
+    returnTo?: string;
   }) {
     const account = await this.prisma.connectedAccount.findFirst({
       where: {
@@ -273,11 +250,120 @@ export class OAuthService {
       userId: input.userId,
       mode: 'reconnect',
       connectedAccountId: account.id,
+      returnTo: input.returnTo,
     });
   }
 
+  private async persistConnectedAccount(input: {
+    pending: {
+      workspaceId: string;
+      userId: string;
+      mode: 'connect' | 'reconnect';
+      connectedAccountId?: string;
+    };
+    provider: IntegrationProvider;
+    profile: {
+      providerAccountId: string;
+      displayName: string | null;
+      email: string | null;
+    };
+    scopes: string[];
+    encryptedTokens: string;
+    tokenExpiresAt: Date | null | undefined;
+    metadata: Prisma.InputJsonValue | undefined;
+  }) {
+    const sharedUpdate = {
+      userId: input.pending.userId,
+      displayName: input.profile.displayName,
+      email: input.profile.email,
+      status: ConnectedAccountStatus.active,
+      scopes: input.scopes,
+      encryptedTokens: input.encryptedTokens,
+      tokenExpiresAt: input.tokenExpiresAt ?? null,
+      metadata: input.metadata,
+      revokedAt: null,
+      lastHealthCheckAt: new Date(),
+      lastHealthOk: true,
+      lastHealthMessage: null,
+    };
+
+    if (
+      input.pending.mode === 'reconnect' &&
+      input.pending.connectedAccountId
+    ) {
+      const existing = await this.prisma.connectedAccount.findFirst({
+        where: {
+          id: input.pending.connectedAccountId,
+          workspaceId: input.pending.workspaceId,
+          provider: input.provider,
+        },
+      });
+      if (!existing) {
+        throw new BadRequestException('reconnect_target_missing');
+      }
+      if (existing.providerAccountId !== input.profile.providerAccountId) {
+        throw new BadRequestException('provider_account_mismatch');
+      }
+      return this.prisma.connectedAccount.update({
+        where: { id: existing.id },
+        data: sharedUpdate,
+      });
+    }
+
+    return this.prisma.connectedAccount.upsert({
+      where: {
+        workspaceId_provider_providerAccountId: {
+          workspaceId: input.pending.workspaceId,
+          provider: input.provider,
+          providerAccountId: input.profile.providerAccountId,
+        },
+      },
+      create: {
+        workspaceId: input.pending.workspaceId,
+        provider: input.provider,
+        providerAccountId: input.profile.providerAccountId,
+        ...sharedUpdate,
+      },
+      update: sharedUpdate,
+    });
+  }
+
+  private async safeAudit(input: {
+    action: string;
+    workspaceId: string;
+    actorUserId: string;
+    resource: string;
+    meta?: Prisma.InputJsonValue;
+  }): Promise<void> {
+    try {
+      await this.audit.append(input);
+    } catch (error) {
+      this.logger.warn(
+        `Audit append failed for ${input.action}: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      );
+    }
+  }
+
+  private toPublicOAuthError(error: unknown): string {
+    if (error instanceof BadRequestException) {
+      const response = error.getResponse();
+      if (typeof response === 'string') return response.slice(0, 64);
+      if (
+        response &&
+        typeof response === 'object' &&
+        'message' in response &&
+        typeof (response as { message: unknown }).message === 'string'
+      ) {
+        return (response as { message: string }).message.slice(0, 64);
+      }
+    }
+    return 'oauth_failed';
+  }
+
   /**
-   * Only allow app deep-link schemes we control (blocks open redirects).
+   * Only allow app callback deep links we control (blocks open redirects).
    */
   private sanitizeReturnTo(returnTo?: string): string | undefined {
     if (!returnTo || returnTo.length > 512) {
@@ -286,16 +372,20 @@ export class OAuthService {
     try {
       const url = new URL(returnTo);
       if (
-        url.protocol === 'chief:' ||
-        url.protocol === 'exp:' ||
-        url.protocol === 'exps:'
+        url.protocol !== 'chief:' &&
+        url.protocol !== 'exp:' &&
+        url.protocol !== 'exps:'
       ) {
-        return returnTo.split('#')[0];
+        return undefined;
       }
+      const path = `${url.hostname}${url.pathname}`;
+      if (!path.includes('integrations/callback')) {
+        return undefined;
+      }
+      return returnTo.split('#')[0];
     } catch {
       return undefined;
     }
-    return undefined;
   }
 
   private successRedirect(
@@ -319,7 +409,7 @@ export class OAuthService {
     const base = returnTo ?? this.config.oauth.errorUrl;
     const url = new URL(base);
     url.searchParams.set('status', 'error');
-    url.searchParams.set('reason', reason.slice(0, 200));
+    url.searchParams.set('reason', reason.slice(0, 64));
     url.searchParams.set('provider', provider);
     return url.toString();
   }

@@ -8,19 +8,17 @@ import {
   Query,
   Res,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { Public } from '../auth/decorators/public.decorator';
 import {
   CurrentUser,
   type AuthUser,
 } from '../auth/decorators/current-user.decorator';
-import { ConnectIntegrationDto } from './dto/connect-integration.dto';
+import {
+  ConnectIntegrationDto,
+  WorkspaceIdQueryDto,
+} from './dto/connect-integration.dto';
 import { IntegrationsService } from './integrations.service';
 
 @ApiTags('integrations')
@@ -38,12 +36,11 @@ export class IntegrationsController {
   @Get()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Provider catalog + workspace connections' })
-  @ApiQuery({ name: 'workspaceId', required: false })
   list(
     @CurrentUser() user: AuthUser,
-    @Query('workspaceId') workspaceId?: string,
+    @Query() query: Partial<WorkspaceIdQueryDto>,
   ) {
-    return this.integrations.listCatalogAndConnections(user, workspaceId);
+    return this.integrations.listCatalogAndConnections(user, query.workspaceId);
   }
 
   @Post(':provider/connect')
@@ -88,28 +85,30 @@ export class IntegrationsController {
   @Get(':connectedAccountId/status')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Connection status' })
-  @ApiQuery({ name: 'workspaceId', required: true })
   status(
     @CurrentUser() user: AuthUser,
     @Param('connectedAccountId') connectedAccountId: string,
-    @Query('workspaceId') workspaceId: string,
+    @Query() query: WorkspaceIdQueryDto,
   ) {
-    return this.integrations.getStatus(user, connectedAccountId, workspaceId);
+    return this.integrations.getStatus(
+      user,
+      connectedAccountId,
+      query.workspaceId,
+    );
   }
 
   @Get(':connectedAccountId/health')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Live integration health check' })
-  @ApiQuery({ name: 'workspaceId', required: true })
   health(
     @CurrentUser() user: AuthUser,
     @Param('connectedAccountId') connectedAccountId: string,
-    @Query('workspaceId') workspaceId: string,
+    @Query() query: WorkspaceIdQueryDto,
   ) {
     return this.integrations.checkHealth(
       user,
       connectedAccountId,
-      workspaceId,
+      query.workspaceId,
     );
   }
 
@@ -125,22 +124,22 @@ export class IntegrationsController {
       user,
       connectedAccountId,
       body.workspaceId,
+      body.returnTo,
     );
   }
 
   @Delete(':connectedAccountId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Disconnect and revoke provider tokens' })
-  @ApiQuery({ name: 'workspaceId', required: true })
   disconnect(
     @CurrentUser() user: AuthUser,
     @Param('connectedAccountId') connectedAccountId: string,
-    @Query('workspaceId') workspaceId: string,
+    @Query() query: WorkspaceIdQueryDto,
   ) {
     return this.integrations.disconnect(
       user,
       connectedAccountId,
-      workspaceId,
+      query.workspaceId,
     );
   }
 }

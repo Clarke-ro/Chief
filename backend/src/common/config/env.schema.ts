@@ -27,7 +27,11 @@ export const envSchema = z.object({
 
   ENCRYPTION_KEY: z
     .string()
-    .min(32, 'ENCRYPTION_KEY must be at least 32 characters'),
+    .min(32, 'ENCRYPTION_KEY must be at least 32 characters')
+    .refine(
+      (value) => Buffer.byteLength(value, 'utf8') >= 32,
+      'ENCRYPTION_KEY must be at least 32 UTF-8 bytes (prefer ASCII)',
+    ),
 
   OAUTH_REDIRECT_BASE_URL: z.string().url().optional(),
   APP_OAUTH_SUCCESS_URL: z
@@ -53,10 +57,8 @@ export const envSchema = z.object({
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),
 
-  SWAGGER_ENABLED: z
-    .enum(['true', 'false'])
-    .default('true')
-    .transform((v) => v === 'true'),
+  /** Omit in production to keep Swagger off; set explicitly to "true" to enable. */
+  SWAGGER_ENABLED: z.enum(['true', 'false']).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -74,6 +76,15 @@ export function validateEnv(config: Record<string, unknown>): Env {
   if (!env.BETTER_AUTH_URL && !env.RAILWAY_PUBLIC_DOMAIN) {
     throw new Error(
       'Invalid environment configuration: set BETTER_AUTH_URL or RAILWAY_PUBLIC_DOMAIN',
+    );
+  }
+
+  const origins = env.CORS_ORIGINS.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  if (origins.includes('*')) {
+    throw new Error(
+      'Invalid environment configuration: CORS_ORIGINS cannot include * while credentials are enabled',
     );
   }
 

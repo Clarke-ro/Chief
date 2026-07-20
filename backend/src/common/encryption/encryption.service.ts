@@ -52,7 +52,15 @@ export class EncryptionService {
     return JSON.parse(this.decrypt(payload)) as T;
   }
 
+  /**
+   * Derive a 32-byte AES key from ENCRYPTION_KEY without changing the
+   * historical UTF-8 prefix behavior (keeps existing sealed tokens valid).
+   */
   private keyBuffer(): Buffer {
-    return Buffer.from(this.config.encryptionKey.slice(0, 32), 'utf8');
+    const raw = Buffer.from(this.config.encryptionKey, 'utf8');
+    if (raw.length < 32) {
+      throw new Error('ENCRYPTION_KEY must be at least 32 UTF-8 bytes');
+    }
+    return raw.subarray(0, 32);
   }
 }

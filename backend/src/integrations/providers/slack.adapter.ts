@@ -202,13 +202,20 @@ export class SlackAdapter extends ProviderAdapter {
   }
 
   async revoke(accessToken: string): Promise<void> {
-    await fetchJson('https://slack.com/api/auth.revoke', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
+    const body = new URLSearchParams({ token: accessToken });
+    const result = await fetchJson<{ ok?: boolean; error?: string }>(
+      'https://slack.com/api/auth.revoke',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body,
       },
-    });
+    );
+    if (result && result.ok === false) {
+      throw new Error(result.error ?? 'Slack auth.revoke failed');
+    }
   }
 
   private requireCredentials() {

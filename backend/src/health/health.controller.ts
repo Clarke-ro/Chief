@@ -24,12 +24,14 @@ export class HealthController {
 
   @Get()
   @HealthCheck()
-  @ApiOperation({ summary: 'Liveness and dependency health' })
+  @ApiOperation({
+    summary: 'Readiness — database, Redis, and memory (use /health/live for liveness)',
+  })
   check() {
     return this.health.check([
       () => this.prismaHealth.pingCheck('database', this.prisma),
       () => this.redis.isHealthy('redis'),
-      () => this.memory.checkHeap('memory_heap', 512 * 1024 * 1024),
+      () => this.memory.checkHeap('memory_heap', 1024 * 1024 * 1024),
     ]);
   }
 

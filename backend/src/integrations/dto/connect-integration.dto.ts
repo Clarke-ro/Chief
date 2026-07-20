@@ -27,3 +27,13 @@ export class WorkspaceScopedDto {
   @MinLength(8)
   workspaceId!: string;
 }
+
+/** Query DTO for workspace-scoped GET/DELETE routes. */
+export class WorkspaceIdQueryDto {
+  @ApiProperty({
+    description: 'Workspace id (cuid or uuid)',
+  })
+  @IsString()
+  @MinLength(8)
+  workspaceId!: string;
+}
