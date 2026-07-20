@@ -1,8 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import {
-  ConnectedAccountStatus,
-  IntegrationProvider,
-} from '@prisma/client';
+import { ConnectedAccountStatus, IntegrationProvider } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { MembershipService } from '../membership/membership.service';
 import { WorkspaceService } from '../workspace/workspace.service';
@@ -64,16 +61,13 @@ export class IntegrationsService {
     }));
   }
 
-  async connect(
-    user: AuthUser,
-    providerParam: string,
-    workspaceId: string,
-  ) {
-    await this.membership.requireMembership(user.id, workspaceId);
+  async connect(user: AuthUser, providerParam: string, workspaceId: string) {
+    const wsId = await this.resolveWorkspaceId(user, workspaceId);
+    await this.membership.requireMembership(user.id, wsId);
     const provider = this.registry.parseProvider(providerParam);
     return this.oauth.startConnect({
       provider,
-      workspaceId,
+      workspaceId: wsId,
       userId: user.id,
     });
   }
@@ -148,8 +142,14 @@ export class IntegrationsService {
     });
   }
 
+  private isWorkspaceUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value.trim(),
+    );
+  }
+
   private async resolveWorkspaceId(user: AuthUser, workspaceId?: string) {
-    if (workspaceId) {
+    if (workspaceId && this.isWorkspaceUuid(workspaceId)) {
       return workspaceId;
     }
     const list = await this.workspaces.listForUser(user.id);

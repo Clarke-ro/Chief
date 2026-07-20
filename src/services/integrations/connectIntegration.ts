@@ -2,6 +2,8 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 
 import type { BackendIntegrationProvider } from '@/config/integrations/providerMap';
+import { ensureActiveWorkspaceId, isWorkspaceUuid } from '@/services/activeWorkspace';
+import { ApiError } from '@/services/api/client';
 import { integrationsRepository } from '@/services/repositories/integrationsRepository';
 
 export type ConnectIntegrationResult =
@@ -15,9 +17,45 @@ const APP_CALLBACK_PATH = 'integrations/callback';
  */
 export async function connectIntegration(
   provider: BackendIntegrationProvider,
-  workspaceId: string,
+  workspaceId?: string,
 ): Promise<ConnectIntegrationResult> {
-  const { authorizeUrl } = await integrationsRepository.connect(provider, workspaceId);
+  let resolvedWorkspaceId: string;
+  try {
+    resolvedWorkspaceId =
+      workspaceId && isWorkspaceUuid(workspaceId) ? workspaceId : await ensureActiveWorkspaceId();
+  } catch {
+    return {
+      ok: false,
+      reason: 'failed',
+      message: 'Could not load your workspace. Sign in again and retry.',
+    };
+  }
+
+  let authorizeUrl: string;
+  try {
+    ({ authorizeUrl } = await integrationsRepository.connect(provider, resolvedWorkspaceId));
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      return {
+        ok: false,
+        reason: 'failed',
+        message: 'Your session expired. Sign in again and retry.',
+      };
+    }
+    if (error instanceof ApiError && error.status === 400) {
+      return {
+        ok: false,
+        reason: 'failed',
+        message: 'Workspace is not ready yet. Pull to refresh and try again.',
+      };
+    }
+    return {
+      ok: false,
+      reason: 'failed',
+      message: 'Could not start OAuth. Check your connection and try again.',
+    };
+  }
+
   const redirectUrl = Linking.createURL(APP_CALLBACK_PATH);
 
   const result = await WebBrowser.openAuthSessionAsync(authorizeUrl, redirectUrl);

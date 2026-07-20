@@ -1,5 +1,6 @@
 import { env } from '@/config/env';
 import { authSession } from '@/services/api/authSession';
+import { getAuthClient } from '@/services/auth/authClient';
 
 export class ApiConfigError extends Error {
   constructor(message = 'API base URL is not configured.') {
@@ -55,6 +56,11 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}): Pro
     const token = await authSession.getAccessToken();
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
+    } else {
+      const cookie = getAuthClient().getCookie();
+      if (cookie) {
+        headers.set('Cookie', cookie);
+      }
     }
   }
 
@@ -68,9 +74,7 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}): Pro
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
     }
-    throw new ApiNetworkError(
-      error instanceof Error ? error.message : 'Network request failed.',
-    );
+    throw new ApiNetworkError(error instanceof Error ? error.message : 'Network request failed.');
   }
 }
 

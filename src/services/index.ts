@@ -1,4 +1,9 @@
-export { getActiveWorkspaceId, persistActiveWorkspaceId } from './activeWorkspace';
+export {
+  getActiveWorkspaceId,
+  persistActiveWorkspaceId,
+  ensureActiveWorkspaceId,
+  isWorkspaceUuid,
+} from './activeWorkspace';
 export {
   apiFetch,
   apiJson,

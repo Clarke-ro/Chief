@@ -24,7 +24,7 @@ import { OnboardingShell } from '@/features/onboarding/components/OnboardingShel
 import type { OnboardingAppId } from '@/features/onboarding/types';
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { getActiveWorkspaceId } from '@/services/activeWorkspace';
+import { ensureActiveWorkspaceId } from '@/services/activeWorkspace';
 import { connectIntegration } from '@/services/integrations/connectIntegration';
 import { onboardingRepository, queryKeys } from '@/services';
 import { integrationsRepository } from '@/services/repositories/integrationsRepository';
@@ -41,12 +41,19 @@ export function ConnectAppsScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
-  const workspaceId = getActiveWorkspaceId();
   const [connectingAppId, setConnectingAppId] = useState<OnboardingAppId | null>(null);
+
+  const workspaceQuery = useQuery({
+    queryKey: [...queryKeys.root, 'activeWorkspace'],
+    queryFn: ensureActiveWorkspaceId,
+  });
+
+  const workspaceId = workspaceQuery.data;
 
   const integrationsQuery = useQuery({
     queryKey: queryKeys.integrations(workspaceId),
-    queryFn: () => integrationsRepository.list(workspaceId),
+    queryFn: () => integrationsRepository.list(workspaceId!),
+    enabled: Boolean(workspaceId),
   });
 
   const connectedProviders = useMemo(() => {
@@ -142,10 +149,16 @@ export function ConnectAppsScreen() {
       >
         <OnboardingCopy title="Connect your apps." />
 
-        {integrationsQuery.isLoading ? (
+        {workspaceQuery.isLoading || integrationsQuery.isLoading ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator />
           </View>
+        ) : null}
+
+        {workspaceQuery.isError ? (
+          <Text style={[styles.errorText, { color: colors.textSecondary }]}>
+            Could not load your workspace. Go back, sign in again, then return here.
+          </Text>
         ) : null}
 
         <View style={styles.grid}>
@@ -204,6 +217,11 @@ const styles = StyleSheet.create({
   loadingRow: {
     alignItems: 'center',
     paddingVertical: spacing[8],
+  },
+  errorText: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
   },
   grid: {
     flexDirection: 'row',

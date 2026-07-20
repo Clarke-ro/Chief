@@ -17,8 +17,19 @@ type AuthTokenPayload = {
 
 function extractToken(payload: unknown): string | null {
   if (!payload || typeof payload !== 'object') return null;
-  const token = (payload as AuthTokenPayload).token;
-  return typeof token === 'string' && token.length > 0 ? token : null;
+  const record = payload as AuthTokenPayload & {
+    session?: { token?: string | null };
+  };
+  if (typeof record.token === 'string' && record.token.length > 0) {
+    return record.token;
+  }
+  const sessionToken = record.session?.token;
+  return typeof sessionToken === 'string' && sessionToken.length > 0 ? sessionToken : null;
+}
+
+async function syncBearerFromSession(): Promise<void> {
+  const session = await authClient.getSession();
+  await persistBearerToken(session.data);
 }
 
 async function persistBearerToken(payload: unknown): Promise<void> {
@@ -51,6 +62,7 @@ export const authService = {
     }
 
     await persistBearerToken(result.data);
+    await syncBearerFromSession();
     return authService.bootstrapSession();
   },
 
@@ -69,6 +81,7 @@ export const authService = {
     }
 
     await persistBearerToken(result.data);
+    await syncBearerFromSession();
     return authService.bootstrapSession();
   },
 
