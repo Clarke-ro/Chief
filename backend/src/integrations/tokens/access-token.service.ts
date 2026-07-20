@@ -79,13 +79,28 @@ export class AccessTokenService {
     try {
       const refreshed = await adapter.refreshAccessToken(bundle.refreshToken);
       const merged = this.vault.mergeRefresh(bundle, refreshed);
+      const sealed = this.vault.seal(merged);
       await this.prisma.connectedAccount.update({
         where: { id: account.id },
         data: {
-          encryptedTokens: this.vault.seal(merged),
+          encryptedTokens: sealed,
           tokenExpiresAt: merged.expiresAt,
           status: ConnectedAccountStatus.active,
           lastHealthMessage: null,
+        },
+      });
+      await this.prisma.oAuthToken.upsert({
+        where: { connectedAccountId: account.id },
+        create: {
+          connectedAccountId: account.id,
+          encryptedPayload: sealed,
+          accessTokenExpiresAt: merged.expiresAt ?? null,
+          scopeSnapshot: merged.scope ?? account.scopes,
+        },
+        update: {
+          encryptedPayload: sealed,
+          accessTokenExpiresAt: merged.expiresAt ?? null,
+          scopeSnapshot: merged.scope ?? account.scopes,
         },
       });
       return merged.accessToken;

@@ -1,5 +1,5 @@
 // Chief — Prisma schema
-// Identity + Better Auth + Connected work integrations (Phase 2)
+// Identity + Better Auth + Connected work integrations + sync domain (Phase 3 prep)
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +13,26 @@ datasource db {
 // ─── Better Auth core ───────────────────────────────────────────────
 
 model User {
-  id                   String   @id @default(cuid())
-  name                 String
-  email                String   @unique
-  emailVerified        Boolean  @default(false)
-  image                String?
-  onboardingCompleted  Boolean  @default(false)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  name                String
+  email               String   @unique
+  emailVerified       Boolean  @default(false)
+  image               String?
+  onboardingCompleted Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  sessions           Session[]
-  accounts           Account[]
-  memberships        Membership[]
-  connectedAccounts  ConnectedAccount[]
-  auditLogs          AuditLog[]
+  sessions            Session[]
+  accounts            Account[]
+  memberships         Membership[]
+  connectedAccounts   ConnectedAccount[]
+  auditLogs           AuditLog[]
+  preference          UserPreference?
+  notifications       Notification[]
+  aiConversations     AiConversation[]
+  briefs              Brief[]
+  tasks               Task[]
+  contacts            Contact[]
 
   @@map("user")
 }
@@ -96,6 +102,16 @@ model Workspace {
   memberships       Membership[]
   connectedAccounts ConnectedAccount[]
   auditLogs         AuditLog[]
+  calendarEvents    CalendarEvent[]
+  emails            Email[]
+  contacts          Contact[]
+  notifications     Notification[]
+  aiConversations   AiConversation[]
+  briefs            Brief[]
+  tasks             Task[]
+  scheduleItems     ScheduleItem[]
+  analytics         AnalyticsSnapshot[]
+  syncStates        SyncState[]
 
   @@map("workspace")
 }
@@ -143,6 +159,7 @@ model ConnectedAccount {
   status            ConnectedAccountStatus @default(active)
   scopes            String[]               @default([])
   /// AES-GCM encrypted JSON: { accessToken, refreshToken?, tokenType?, raw? }
+  /// Kept for live OAuth path; OAuthToken is the sync-domain vault (1:1).
   encryptedTokens   String
   tokenExpiresAt    DateTime?
   lastHealthCheckAt DateTime?
@@ -153,8 +170,14 @@ model ConnectedAccount {
   updatedAt         DateTime               @updatedAt
   revokedAt         DateTime?
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  oauthToken     OAuthToken?
+  calendarEvents CalendarEvent[]
+  emails         Email[]
+  contacts       Contact[]
+  tasks          Task[]
+  syncStates     SyncState[]
 
   @@unique([workspaceId, provider, providerAccountId])
   @@index([workspaceId, provider])
@@ -163,15 +186,32 @@ model ConnectedAccount {
   @@map("connected_account")
 }
 
+/// Dedicated token vault row for sync workers (mirrors ConnectedAccount.encryptedTokens).
+model OAuthToken {
+  id                    String    @id @default(cuid())
+  connectedAccountId    String    @unique
+  encryptedPayload      String
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  tokenType             String?
+  scopeSnapshot         String[]  @default([])
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  connectedAccount ConnectedAccount @relation(fields: [connectedAccountId], references: [id], onDelete: Cascade)
+
+  @@map("oauth_token")
+}
+
 model AuditLog {
-  id           String   @id @default(cuid())
-  workspaceId  String?
-  actorUserId  String?
-  action       String
-  resource     String?
-  metaJson     Json?
-  ip           String?
-  createdAt    DateTime @default(now())
+  id          String   @id @default(cuid())
+  workspaceId String?
+  actorUserId String?
+  action      String
+  resource    String?
+  metaJson    Json?
+  ip          String?
+  createdAt   DateTime @default(now())
 
   workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   actor     User?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
@@ -179,4 +219,377 @@ model AuditLog {
   @@index([workspaceId, createdAt])
   @@index([actorUserId, createdAt])
   @@map("audit_log")
+}
+
+// ─── Sync domain (permanent home for provider data) ─────────────────
+
+enum SyncResource {
+  calendar
+  email
+  contacts
+  tasks
+  messages
+}
+
+enum SyncRunStatus {
+  idle
+  running
+  succeeded
+  failed
+}
+
+/// Per-account cursor / watermark for incremental sync.
+model SyncState {
+  id                 String           @id @default(cuid())
+  workspaceId        String
+  connectedAccountId String
+  resource           SyncResource
+  cursor             String?
+  status             SyncRunStatus    @default(idle)
+  lastSyncedAt       DateTime?
+  lastError          String?
+  meta               Json?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectedAccount ConnectedAccount @relation(fields: [connectedAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([connectedAccountId, resource])
+  @@index([workspaceId, resource])
+  @@map("sync_state")
+}
+
+model CalendarEvent {
+  id                 String              @id @default(cuid())
+  workspaceId        String
+  connectedAccountId String?
+  provider           IntegrationProvider
+  providerEventId    String
+  title              String
+  description        String?
+  location           String?
+  status             String?
+  startsAt           DateTime
+  endsAt             DateTime
+  allDay             Boolean             @default(false)
+  timezone           String?
+  attendees          Json?
+  htmlLink           String?
+  raw                Json?
+  syncedAt           DateTime            @default(now())
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectedAccount ConnectedAccount? @relation(fields: [connectedAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([connectedAccountId, providerEventId])
+  @@index([workspaceId, startsAt])
+  @@index([workspaceId, provider])
+  @@map("calendar_event")
+}
+
+/// Synced mailbox threads/messages (table name `email`).
+model Email {
+  id                 String              @id @default(cuid())
+  workspaceId        String
+  connectedAccountId String?
+  provider           IntegrationProvider
+  providerMessageId  String
+  threadId           String?
+  subject            String?
+  snippet            String?
+  bodyText           String?
+  bodyHtml           String?
+  fromAddress        String?
+  fromName           String?
+  toAddresses        String[]            @default([])
+  ccAddresses        String[]            @default([])
+  labelIds           String[]            @default([])
+  isUnread           Boolean             @default(true)
+  isStarred          Boolean             @default(false)
+  receivedAt         DateTime?
+  raw                Json?
+  syncedAt           DateTime            @default(now())
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectedAccount ConnectedAccount? @relation(fields: [connectedAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([connectedAccountId, providerMessageId])
+  @@index([workspaceId, receivedAt])
+  @@index([workspaceId, isUnread])
+  @@map("email")
+}
+
+model Contact {
+  id                 String               @id @default(cuid())
+  workspaceId        String
+  userId             String?
+  connectedAccountId String?
+  provider           IntegrationProvider?
+  providerContactId  String?
+  displayName        String?
+  givenName          String?
+  familyName         String?
+  primaryEmail       String?
+  emails             String[]             @default([])
+  phones             String[]             @default([])
+  company            String?
+  raw                Json?
+  syncedAt           DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user             User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  connectedAccount ConnectedAccount? @relation(fields: [connectedAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([connectedAccountId, providerContactId])
+  @@index([workspaceId, primaryEmail])
+  @@index([workspaceId, displayName])
+  @@map("contact")
+}
+
+enum NotificationChannel {
+  in_app
+  push
+  email
+}
+
+model Notification {
+  id          String              @id @default(cuid())
+  workspaceId String
+  userId      String
+  channel     NotificationChannel @default(in_app)
+  type        String
+  title       String
+  body        String?
+  href        String?
+  meta        Json?
+  readAt      DateTime?
+  createdAt   DateTime            @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([workspaceId, createdAt])
+  @@index([userId, readAt])
+  @@map("notification")
+}
+
+model AiConversation {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String
+  title       String
+  preview     String?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+
+  @@index([workspaceId, updatedAt])
+  @@index([userId, updatedAt])
+  @@map("ai_conversation")
+}
+
+enum MessageRole {
+  user
+  chief
+  system
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String
+  role           MessageRole
+  content        String
+  /// Suggested actions, canvas payload, platform context, etc.
+  meta           Json?
+  createdAt      DateTime    @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("message")
+}
+
+/// Daily AI brief for a workspace (Home).
+model Brief {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  userId         String?
+  /// Calendar date the brief is for (UTC date).
+  briefDate      DateTime @db.Date
+  userName       String?
+  successScore   Float?
+  successLabel   String?
+  successInsight String?
+  /// Full HomeBrief-compatible snapshot (focus + briefing signals).
+  payload        Json
+  generatedAt    DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, briefDate])
+  @@index([workspaceId, generatedAt])
+  @@map("brief")
+}
+
+enum TaskPriority {
+  high
+  medium
+  low
+}
+
+enum TaskStatus {
+  ready
+  in_progress
+  waiting
+  done
+}
+
+enum TaskSection {
+  today
+  upcoming
+  waiting
+  completed
+}
+
+model Task {
+  id                 String               @id @default(cuid())
+  workspaceId        String
+  userId             String?
+  connectedAccountId String?
+  provider           IntegrationProvider?
+  providerTaskId     String?
+  title              String
+  description        String               @default("")
+  details            String               @default("")
+  platform           String
+  priority           TaskPriority         @default(medium)
+  status             TaskStatus           @default(ready)
+  section            TaskSection          @default(today)
+  estimatedTime      String?
+  estimatedMinutes   Int?
+  confidence         Float?
+  dueAt              DateTime?
+  dueLabel           String?
+  sourceBriefId      String?
+  meta               Json?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  completedAt        DateTime?
+
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user             User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  connectedAccount ConnectedAccount? @relation(fields: [connectedAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([connectedAccountId, providerTaskId])
+  @@index([workspaceId, section, status])
+  @@index([workspaceId, dueAt])
+  @@index([userId, status])
+  @@map("task")
+}
+
+enum ScheduleBlockKind {
+  normal
+  major
+}
+
+enum ScheduleItemStatus {
+  completed
+  in_progress
+  upcoming
+}
+
+enum SweepPhase {
+  none
+  checking
+  cleared
+  still_open
+}
+
+/// Today timeline rows (DayPlanItem).
+model ScheduleItem {
+  id          String             @id @default(cuid())
+  workspaceId String
+  title       String
+  subtitle    String             @default("")
+  platform    String
+  /// Display clock time, e.g. "2:30 PM" (enriched later with startsAt).
+  timeLabel   String
+  startsAt    DateTime?
+  endsAt      DateTime?
+  status      ScheduleItemStatus @default(upcoming)
+  duration    String?
+  attendees   Int?
+  blockKind   ScheduleBlockKind  @default(normal)
+  focusId     String?
+  sweepPhase  SweepPhase         @default(none)
+  lastSweepAt DateTime?
+  meta        Json?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, startsAt])
+  @@index([workspaceId, status])
+  @@map("schedule_item")
+}
+
+/// Persisted analytics snapshots for the Analytics tab.
+model AnalyticsSnapshot {
+  id          String   @id @default(cuid())
+  workspaceId String
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
+  /// AnalyticsSnapshot-compatible JSON from the app.
+  payload     Json
+  generatedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, periodStart, periodEnd])
+  @@index([workspaceId, generatedAt])
+  @@map("analytics_snapshot")
+}
+
+enum ThemePreference {
+  system
+  light
+  dark
+}
+
+model UserPreference {
+  id                 String          @id @default(cuid())
+  userId             String          @unique
+  theme              ThemePreference @default(system)
+  /// Notification toggles: { brief, recs, meetings, weekly, push, email }
+  notificationPrefs  Json            @default("{}")
+  /// Appearance: { accent, appIcon, textSize }
+  appearance         Json            @default("{}")
+  /// Working / focus hours windows
+  workingHours       Json?
+  locale             String          @default("en")
+  timezone           String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preference")
 }

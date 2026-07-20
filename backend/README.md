@@ -6,10 +6,11 @@ Backend for the Chief AI chief-of-staff product.
 
 - **Phase 1:** Foundation (config, Prisma, Redis, BullMQ, health, logging)
 - **Phase 2:** Connection & Integration Platform (Better Auth session, workspaces, official OAuth)
+- **Phase 3 (prep):** Sync-domain schema + BullMQ worker/schedules (no provider pull yet)
 
 ## Stack
 
-NestJS · TypeScript · Prisma · Supabase PostgreSQL · Better Auth · Redis · BullMQ · Swagger · Pino · Docker · Railway
+NestJS · TypeScript · Prisma · Supabase PostgreSQL · Better Auth · Upstash Redis · BullMQ · Swagger · Pino · Docker · Railway
 
 ## Deploy
 
@@ -24,6 +25,20 @@ Local `.env` uses `http://localhost:3000`. Production uses the stable Railway HT
 | Me | `GET /v1/me` |
 | Integrations | `/v1/integrations/*` |
 | Swagger | `/docs` |
+
+## Background jobs
+
+| Process | Command | Role |
+|---------|---------|------|
+| API | `npm run start:dev` / `start:prod` | Enqueues jobs via `QueueService` |
+| Worker | `npm run start:worker:dev` / `start:worker:prod` | Consumes queues + registers cron schedules |
+
+Queues: `sync`, `briefing`, `analytics`, `notifications`, `ai`, `actions`.  
+Default retry: 5 attempts, exponential backoff. Processors are **no-ops** until sync ships.
+
+## Sync data model
+
+Prisma now includes workspace-scoped homes for: `OAuthToken`, `SyncState`, `CalendarEvent`, `Email`, `Contact`, `Notification`, `AiConversation` / `Message`, `Brief`, `Task`, `ScheduleItem`, `AnalyticsSnapshot`, `UserPreference` — plus existing User / Workspace / Membership / ConnectedAccount.
 
 ## Integrations
 

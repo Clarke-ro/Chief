@@ -304,13 +304,20 @@ export class OAuthService {
       if (existing.providerAccountId !== input.profile.providerAccountId) {
         throw new BadRequestException('provider_account_mismatch');
       }
-      return this.prisma.connectedAccount.update({
+      const updated = await this.prisma.connectedAccount.update({
         where: { id: existing.id },
         data: sharedUpdate,
       });
+      await this.upsertOAuthToken({
+        connectedAccountId: updated.id,
+        encryptedPayload: input.encryptedTokens,
+        accessTokenExpiresAt: input.tokenExpiresAt ?? null,
+        scopeSnapshot: input.scopes,
+      });
+      return updated;
     }
 
-    return this.prisma.connectedAccount.upsert({
+    const account = await this.prisma.connectedAccount.upsert({
       where: {
         workspaceId_provider_providerAccountId: {
           workspaceId: input.pending.workspaceId,
@@ -325,6 +332,35 @@ export class OAuthService {
         ...sharedUpdate,
       },
       update: sharedUpdate,
+    });
+    await this.upsertOAuthToken({
+      connectedAccountId: account.id,
+      encryptedPayload: input.encryptedTokens,
+      accessTokenExpiresAt: input.tokenExpiresAt ?? null,
+      scopeSnapshot: input.scopes,
+    });
+    return account;
+  }
+
+  private async upsertOAuthToken(input: {
+    connectedAccountId: string;
+    encryptedPayload: string;
+    accessTokenExpiresAt: Date | null;
+    scopeSnapshot: string[];
+  }): Promise<void> {
+    await this.prisma.oAuthToken.upsert({
+      where: { connectedAccountId: input.connectedAccountId },
+      create: {
+        connectedAccountId: input.connectedAccountId,
+        encryptedPayload: input.encryptedPayload,
+        accessTokenExpiresAt: input.accessTokenExpiresAt,
+        scopeSnapshot: input.scopeSnapshot,
+      },
+      update: {
+        encryptedPayload: input.encryptedPayload,
+        accessTokenExpiresAt: input.accessTokenExpiresAt,
+        scopeSnapshot: input.scopeSnapshot,
+      },
     });
   }
 

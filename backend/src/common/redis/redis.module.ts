@@ -18,6 +18,7 @@ import { RedisService } from './redis.service';
           lazyConnect: false,
           connectTimeout: 10_000,
           commandTimeout: 5_000,
+          ...(config.redisUrl.startsWith('rediss://') ? { tls: {} } : {}),
         });
 
         client.on('connect', () => logger.log('Redis connecting'));

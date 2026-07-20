@@ -1,21 +1,33 @@
 import { BullModule } from '@nestjs/bullmq';
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { AppConfigService } from '../config/app-config.service';
 import { Queues } from '../constants/queues';
+import { DEFAULT_JOB_OPTIONS } from './job-options';
+import { QueueService } from './queue.service';
+
+function redisConnectionFromUrl(url: string) {
+  const useTls = url.startsWith('rediss://');
+  return {
+    url,
+    maxRetriesPerRequest: null as null,
+    enableReadyCheck: true,
+    ...(useTls ? { tls: {} } : {}),
+  };
+}
 
 /**
  * Registers BullMQ connection + named queues.
- * Processors are added in Sync / AI / Actions phases.
+ * API process: producers via QueueService.
+ * Worker process: processors in WorkerModule.
  */
+@Global()
 @Module({
   imports: [
     BullModule.forRootAsync({
       inject: [AppConfigService],
       useFactory: (config: AppConfigService) => ({
-        connection: {
-          url: config.redisUrl,
-          maxRetriesPerRequest: null,
-        },
+        connection: redisConnectionFromUrl(config.redisUrl),
+        defaultJobOptions: DEFAULT_JOB_OPTIONS,
       }),
     }),
     BullModule.registerQueue(
@@ -27,6 +39,7 @@ import { Queues } from '../constants/queues';
       { name: Queues.NOTIFICATIONS },
     ),
   ],
-  exports: [BullModule],
+  providers: [QueueService],
+  exports: [BullModule, QueueService],
 })
 export class BullMqRootModule {}

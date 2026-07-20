@@ -1,14 +1,14 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger } from 'nestjs-pino';
-import { AppModule } from './app.module';
 import { AppConfigService } from './common/config/app-config.service';
+import { WorkerAppModule } from './worker/worker-app.module';
 
 /**
- * BullMQ worker process entrypoint (same codebase as API).
- * Processors are registered in later phases; this boots infrastructure only.
+ * BullMQ worker process — consumes queues, registers schedules.
+ * Sync processors are no-ops until the sync phase ships.
  */
 async function bootstrap() {
-  const app = await NestFactory.createApplicationContext(AppModule, {
+  const app = await NestFactory.createApplicationContext(WorkerAppModule, {
     bufferLogs: true,
   });
 
@@ -17,7 +17,7 @@ async function bootstrap() {
   app.useLogger(logger);
 
   logger.log(
-    `${config.appName} worker context ready (${config.nodeEnv}) — no processors registered yet`,
+    `${config.appName} worker ready (${config.nodeEnv}) — processors registered`,
   );
 
   const shutdown = async (signal: string) => {
