@@ -22,8 +22,13 @@ Railway service **Root Directory** = `backend`. Do not split repos unless the te
 5. Generate domain: Settings → Networking → Public Networking
 6. After first deploy, set OAuth redirect URIs once to:
    `https://<railway-domain>/v1/integrations/oauth/<provider>/callback`
-7. Run a **worker** process (same image, `npm run start:worker:prod`) so BullMQ
+7. Run a **worker** service (same Dockerfile, `APP_ROLE=worker`) so BullMQ
    processors + scheduled jobs are active.
+   - Create: `railway add --service worker`
+   - Copy API env vars onto `worker`, then set `APP_ROLE=worker`
+   - Deploy from `/backend`: `railway up --service worker`
+   - Worker listens on `PORT` only for `/health/live` (same healthcheck as API)
+   - API alone runs `prisma migrate deploy` on boot; worker skips migrate
 
 ## Required variables
 
@@ -31,6 +36,7 @@ Railway service **Root Directory** = `backend`. Do not split repos unless the te
 |----------|--------|
 | `DATABASE_URL` | Supabase Postgres (pooler OK for API; direct for migrate if needed) |
 | `REDIS_URL` | Upstash Redis TCP URL (`rediss://` preferred) |
+| `APP_ROLE` | `api` (default) or `worker` — set on the worker service only |
 | `BETTER_AUTH_SECRET` | 32+ random chars |
 | `ENCRYPTION_KEY` | 32+ random chars |
 | `BETTER_AUTH_URL` | Optional if `RAILWAY_PUBLIC_DOMAIN` is present |

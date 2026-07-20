@@ -13,6 +13,8 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+# api | worker — Railway worker service sets APP_ROLE=worker
+ENV APP_ROLE=api
 
 RUN addgroup -S chief && adduser -S chief -G chief
 
@@ -25,4 +27,5 @@ COPY --from=build --chown=chief:chief /app/prisma ./prisma
 USER chief
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+# API runs migrations then HTTP server. Worker skips migrate (API owns that) and runs BullMQ.
+CMD ["sh", "-c", "if [ \"$APP_ROLE\" = \"worker\" ]; then node dist/worker.js; else npx prisma migrate deploy && node dist/main.js; fi"]

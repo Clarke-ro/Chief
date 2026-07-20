@@ -31,7 +31,20 @@ export const env = {
    */
   aiProvider: readPublic('EXPO_PUBLIC_AI_PROVIDER'),
 
+  /** Supabase project URL (Project Settings → API). */
+  supabaseUrl: (() => {
+    const raw = readPublic('EXPO_PUBLIC_SUPABASE_URL');
+    return raw ? stripTrailingSlash(raw) : undefined;
+  })(),
+
+  /** Supabase anon / public key only — never the service_role key. */
+  supabaseAnonKey: readPublic('EXPO_PUBLIC_SUPABASE_ANON_KEY'),
+
   get isApiConfigured(): boolean {
     return Boolean(this.apiBaseUrl);
+  },
+
+  get isSupabaseConfigured(): boolean {
+    return Boolean(this.supabaseUrl && this.supabaseAnonKey);
   },
 } as const;

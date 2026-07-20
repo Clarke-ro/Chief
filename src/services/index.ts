@@ -33,5 +33,6 @@ export { authClient } from './auth/authClient';
 export { assertSafeExternalUrl, summarizeUrlForDisplay } from './safeUrl';
 export { clearUserSession } from './sessionCleanup';
 export { storage } from './storage';
+export { getSupabase, tryGetSupabase } from './supabase/client';
 export { GLOBAL_KEYS, workspaceDataKeys, workspaceKey } from './storageKeys';
 export { workspaceNav } from './workspaceNav';

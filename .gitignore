@@ -51,3 +51,7 @@ docs/
 # Project-understanding / agent instruction docs (keep local only)
 AGENTS.md
 CLAUDE.md
+
+# Supabase CLI local state (linked project secrets / cache)
+supabase/.temp/
+supabase/.branches/
