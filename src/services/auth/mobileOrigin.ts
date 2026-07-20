@@ -1,21 +1,18 @@
-import Constants from 'expo-constants';
-import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
 
 const APP_SCHEME = 'chief';
 
 /**
  * Origin Better Auth expects for native requests.
- * Expo Go uses exp:// — custom scheme builds use chief://.
+ * Avoid Linking.createURL / Constants when Expo Go's native host is broken —
+ * those can produce unmatched routes like `exp://127.0.0.1:8081/127.0.0.1:8081/`.
  */
 export function getMobileAuthOrigin(): string {
   if (Platform.OS === 'web') {
     return typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8081';
   }
 
-  if (Constants.appOwnership === 'expo') {
-    return Linking.createURL('');
-  }
-
-  return Linking.createURL('', { scheme: APP_SCHEME });
+  // Expo Go deep links use exp://; custom builds use chief://.
+  // Prefer chief:// for auth origin stability when Constants.appOwnership is unavailable.
+  return `${APP_SCHEME}://`;
 }

@@ -38,11 +38,15 @@ export const integrationsRepository = {
   connect(
     provider: BackendIntegrationProvider,
     workspaceId: string,
+    returnTo?: string,
   ): Promise<ConnectIntegrationResponse> {
     return apiJson<ConnectIntegrationResponse>(`/v1/integrations/${provider}/connect`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workspaceId }),
+      body: JSON.stringify({
+        workspaceId,
+        ...(returnTo ? { returnTo } : {}),
+      }),
     });
   },
 

@@ -62,8 +62,23 @@ export const authService = {
     }
 
     await persistBearerToken(result.data);
-    await syncBearerFromSession();
-    return authService.bootstrapSession();
+
+    try {
+      await syncBearerFromSession();
+      return await authService.bootstrapSession();
+    } catch (error) {
+      // Cookie/session cache can lag on first write — bearer from sign-in response is enough.
+      if (await authSession.getAccessToken()) {
+        return await apiJson<MeResponse>('/v1/me').then((me) => {
+          const primary = me.workspaces[0];
+          if (primary) persistActiveWorkspaceId(primary.id);
+          return me;
+        });
+      }
+      throw error instanceof AuthServiceError
+        ? error
+        : new AuthServiceError(formatAuthError(error));
+    }
   },
 
   async signUp(input: { email: string; password: string; name?: string }): Promise<MeResponse> {
@@ -81,8 +96,22 @@ export const authService = {
     }
 
     await persistBearerToken(result.data);
-    await syncBearerFromSession();
-    return authService.bootstrapSession();
+
+    try {
+      await syncBearerFromSession();
+      return await authService.bootstrapSession();
+    } catch (error) {
+      if (await authSession.getAccessToken()) {
+        return await apiJson<MeResponse>('/v1/me').then((me) => {
+          const primary = me.workspaces[0];
+          if (primary) persistActiveWorkspaceId(primary.id);
+          return me;
+        });
+      }
+      throw error instanceof AuthServiceError
+        ? error
+        : new AuthServiceError(formatAuthError(error));
+    }
   },
 
   async signOut(): Promise<void> {

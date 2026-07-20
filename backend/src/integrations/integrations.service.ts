@@ -61,7 +61,12 @@ export class IntegrationsService {
     }));
   }
 
-  async connect(user: AuthUser, providerParam: string, workspaceId: string) {
+  async connect(
+    user: AuthUser,
+    providerParam: string,
+    workspaceId: string,
+    returnTo?: string,
+  ) {
     const wsId = await this.resolveWorkspaceId(user, workspaceId);
     await this.membership.requireMembership(user.id, wsId);
     const provider = this.registry.parseProvider(providerParam);
@@ -69,6 +74,7 @@ export class IntegrationsService {
       provider,
       workspaceId: wsId,
       userId: user.id,
+      returnTo,
     });
   }
 
@@ -142,14 +148,20 @@ export class IntegrationsService {
     });
   }
 
-  private isWorkspaceUuid(value: string): boolean {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      value.trim(),
-    );
+  private isValidWorkspaceId(value: string): boolean {
+    const id = value.trim();
+    if (!id || id === 'default') return false;
+    if (
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+    ) {
+      return true;
+    }
+    // Prisma cuid / cuid2
+    return /^c[a-z0-9]{20,}$/i.test(id);
   }
 
   private async resolveWorkspaceId(user: AuthUser, workspaceId?: string) {
-    if (workspaceId && this.isWorkspaceUuid(workspaceId)) {
+    if (workspaceId && this.isValidWorkspaceId(workspaceId)) {
       return workspaceId;
     }
     const list = await this.workspaces.listForUser(user.id);

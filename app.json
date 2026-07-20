@@ -40,7 +40,12 @@
         }
       ],
       "expo-web-browser",
-      "expo-asset"
+      [
+        "expo-asset",
+        {
+          "assets": []
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

@@ -1,16 +1,13 @@
-import * as SecureStore from 'expo-secure-store';
+import { memorySecureStore } from '@/services/auth/memorySecureStore';
 
 /**
- * Thin wrapper around Expo SecureStore for secrets (tokens, credentials).
- * Prefer `storage` (MMKV/memory) for non-sensitive preferences.
- * Soft-fails on platform/storage errors so logout and boot stay resilient.
- *
- * @see https://docs.expo.dev/versions/v57.0.0/sdk/securestore/
+ * Secrets storage. Uses in-memory store while ExpoSecureStore native module
+ * is unavailable (current TestFlight Expo Go host). Soft-fails on errors.
  */
 export const secureStorage = {
   async getItem(key: string): Promise<string | null> {
     try {
-      return await SecureStore.getItemAsync(key);
+      return await memorySecureStore.getItemAsync(key);
     } catch (error) {
       if (__DEV__) {
         console.warn('[secureStorage] getItem failed', key, error);
@@ -21,7 +18,7 @@ export const secureStorage = {
 
   async setItem(key: string, value: string): Promise<void> {
     try {
-      await SecureStore.setItemAsync(key, value);
+      await memorySecureStore.setItemAsync(key, value);
     } catch (error) {
       if (__DEV__) {
         console.warn('[secureStorage] setItem failed', key, error);
@@ -32,12 +29,11 @@ export const secureStorage = {
 
   async deleteItem(key: string): Promise<void> {
     try {
-      await SecureStore.deleteItemAsync(key);
+      await memorySecureStore.deleteItemAsync(key);
     } catch (error) {
       if (__DEV__) {
         console.warn('[secureStorage] deleteItem failed', key, error);
       }
-      throw error instanceof Error ? error : new Error('SecureStore deleteItem failed.');
     }
   },
 };

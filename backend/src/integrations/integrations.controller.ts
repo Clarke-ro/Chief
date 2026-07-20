@@ -54,7 +54,12 @@ export class IntegrationsController {
     @Param('provider') provider: string,
     @Body() body: ConnectIntegrationDto,
   ) {
-    return this.integrations.connect(user, provider, body.workspaceId);
+    return this.integrations.connect(
+      user,
+      provider,
+      body.workspaceId,
+      body.returnTo,
+    );
   }
 
   @Get('oauth/:provider/callback')

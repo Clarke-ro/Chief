@@ -8,6 +8,8 @@ export type OAuthStatePayload = {
   userId: string;
   codeVerifier: string;
   redirectUri: string;
+  /** Client deep link to open after OAuth (e.g. exp://… or chief://…). */
+  returnTo?: string;
   mode: 'connect' | 'reconnect';
   connectedAccountId?: string;
   createdAt: string;

@@ -1,10 +1,10 @@
 import { expoClient } from '@better-auth/expo/client';
 import { createAuthClient } from 'better-auth/react';
-import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import { env } from '@/config/env';
 import { getMobileAuthOrigin } from '@/services/auth/mobileOrigin';
+import { memorySecureStore } from '@/services/auth/memorySecureStore';
 
 function createClient() {
   if (!env.apiBaseUrl) {
@@ -26,7 +26,8 @@ function createClient() {
       expoClient({
         scheme: 'chief',
         storagePrefix: 'chief',
-        storage: SecureStore,
+        // Native ExpoSecureStore is unavailable on this Expo Go host — use memory.
+        storage: memorySecureStore,
       }),
     ],
   });

@@ -25,6 +25,7 @@ import type { OnboardingAppId } from '@/features/onboarding/types';
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { ensureActiveWorkspaceId } from '@/services/activeWorkspace';
+import { agentLog } from '@/services/debugAgentLog';
 import { connectIntegration } from '@/services/integrations/connectIntegration';
 import { onboardingRepository, queryKeys } from '@/services';
 import { integrationsRepository } from '@/services/repositories/integrationsRepository';
@@ -50,6 +51,16 @@ export function ConnectAppsScreen() {
   });
 
   const workspaceId = workspaceQuery.data;
+
+  // #region agent log
+  if (workspaceQuery.isError || workspaceQuery.isSuccess) {
+    agentLog('A', 'ConnectAppsScreen.tsx:workspaceQuery', 'workspace query state', {
+      status: workspaceQuery.status,
+      hasData: Boolean(workspaceId),
+      errorMessage: workspaceQuery.error instanceof Error ? workspaceQuery.error.message : null,
+    });
+  }
+  // #endregion
 
   const integrationsQuery = useQuery({
     queryKey: queryKeys.integrations(workspaceId),
@@ -93,8 +104,8 @@ export function ConnectAppsScreen() {
     setConnectingAppId(appId);
     try {
       const result = await connectIntegration(provider, workspaceId);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.integrations(workspaceId) });
       if (result.ok) {
-        await queryClient.invalidateQueries({ queryKey: queryKeys.integrations(workspaceId) });
         return;
       }
       if (result.reason === 'failed' && result.message) {

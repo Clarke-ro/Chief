@@ -1,8 +1,8 @@
 module.exports = function (api) {
   api.cache(true);
   return {
-    // Do not set jsxImportSource: 'nativewind' — it breaks Pressable style callbacks
-    // used across the app (CTA fills never applied). No screens use className today.
-    presets: ['babel-preset-expo', 'nativewind/babel'],
+    // NativeWind disabled for now — unused in screens and can interfere with Metro
+    // platform resolution during Expo Go debugging.
+    presets: ['babel-preset-expo'],
   };
 };

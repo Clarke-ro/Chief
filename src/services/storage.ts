@@ -23,33 +23,10 @@ function createMemoryStorage(): KeyValueStorage {
 }
 
 /**
- * Expo Go–safe storage: prefers MMKV, falls back to in-memory when native
- * modules are unavailable (Expo Go / environments without a custom native build).
+ * Expo Go–safe storage.
+ * react-native-mmkv v4 (Nitro) is not available in Expo Go and can disturb
+ * native module startup if required too early — use in-memory for now.
  *
  * Non-secrets only (theme, day plan, chat seeds). Auth tokens → `secureStorage`.
  */
-function createStorage(): KeyValueStorage {
-  try {
-    // Lazy require so Expo Go can fall back without a hard crash at import time.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createMMKV } = require('react-native-mmkv') as typeof import('react-native-mmkv');
-    const mmkv = createMMKV({ id: 'chief.storage' });
-
-    return {
-      getString: (key) => mmkv.getString(key),
-      set: (key, value) => {
-        mmkv.set(key, value);
-      },
-      remove: (key) => {
-        mmkv.remove(key);
-      },
-      clearAll: () => {
-        mmkv.clearAll();
-      },
-    };
-  } catch {
-    return createMemoryStorage();
-  }
-}
-
-export const storage = createStorage();
+export const storage: KeyValueStorage = createMemoryStorage();

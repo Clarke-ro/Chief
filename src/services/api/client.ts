@@ -2,6 +2,7 @@ import { env } from '@/config/env';
 import { authSession } from '@/services/api/authSession';
 import { getAuthClient } from '@/services/auth/authClient';
 import { getMobileAuthOrigin } from '@/services/auth/mobileOrigin';
+import { agentLog } from '@/services/debugAgentLog';
 import { Platform } from 'react-native';
 
 export class ApiConfigError extends Error {
@@ -56,13 +57,20 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}): Pro
 
   if (!options.skipAuth) {
     const cookie = getAuthClient().getCookie();
+    const token = await authSession.getAccessToken();
+    // #region agent log
+    agentLog('E', 'client.ts:apiFetch', 'auth headers', {
+      path: normalizedPath,
+      hasCookie: Boolean(cookie && cookie.length > 0),
+      cookieLen: cookie ? cookie.length : 0,
+      hasBearer: Boolean(token),
+      using: cookie && cookie.length > 0 ? 'cookie' : token ? 'bearer' : 'none',
+    });
+    // #endregion
     if (cookie) {
       headers.set('Cookie', cookie);
-    } else {
-      const token = await authSession.getAccessToken();
-      if (token) {
-        headers.set('Authorization', `Bearer ${token}`);
-      }
+    } else if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
     }
 
     if (Platform.OS !== 'web') {

@@ -32,7 +32,7 @@ export function AuthScreen() {
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const continueNext = () => router.push('/onboarding/connect');
+  const continueNext = () => router.replace('/onboarding/connect');
   const isLight = scheme === 'light';
   const labelColor = isLight ? '#111113' : colors.text;
   const placeholderColor = colors.textTertiary;

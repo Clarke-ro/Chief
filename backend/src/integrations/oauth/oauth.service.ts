@@ -41,11 +41,14 @@ export class OAuthService {
     userId: string;
     mode?: 'connect' | 'reconnect';
     connectedAccountId?: string;
+    /** App deep link Expo/native should open after provider OAuth. */
+    returnTo?: string;
   }): Promise<{ authorizeUrl: string; state: string }> {
     const adapter = this.registry.requireConfigured(input.provider);
     const { verifier, challenge } = createPkcePair();
     const state = createOAuthState();
     const redirectUri = this.buildRedirectUri(input.provider);
+    const returnTo = this.sanitizeReturnTo(input.returnTo);
 
     await this.stateStore.save(state, {
       provider: input.provider,
@@ -53,6 +56,7 @@ export class OAuthService {
       userId: input.userId,
       codeVerifier: verifier,
       redirectUri,
+      returnTo,
       mode: input.mode ?? 'connect',
       connectedAccountId: input.connectedAccountId,
       createdAt: new Date().toISOString(),
@@ -97,6 +101,8 @@ export class OAuthService {
         redirectUrl: this.errorRedirect('invalid_state', input.provider),
       };
     }
+
+    const clientReturnTo = pending.returnTo;
 
     try {
       const adapter = this.registry.requireConfigured(input.provider);
@@ -164,7 +170,11 @@ export class OAuthService {
       });
 
       return {
-        redirectUrl: this.successRedirect(account.id, input.provider),
+        redirectUrl: this.successRedirect(
+          account.id,
+          input.provider,
+          clientReturnTo,
+        ),
       };
     } catch (error) {
       this.logger.error(
@@ -184,6 +194,7 @@ export class OAuthService {
         redirectUrl: this.errorRedirect(
           error instanceof Error ? error.message : 'oauth_failed',
           input.provider,
+          clientReturnTo,
         ),
       };
     }
@@ -265,11 +276,36 @@ export class OAuthService {
     });
   }
 
+  /**
+   * Only allow app deep-link schemes we control (blocks open redirects).
+   */
+  private sanitizeReturnTo(returnTo?: string): string | undefined {
+    if (!returnTo || returnTo.length > 512) {
+      return undefined;
+    }
+    try {
+      const url = new URL(returnTo);
+      if (
+        url.protocol === 'chief:' ||
+        url.protocol === 'exp:' ||
+        url.protocol === 'exps:'
+      ) {
+        return returnTo.split('#')[0];
+      }
+    } catch {
+      return undefined;
+    }
+    return undefined;
+  }
+
   private successRedirect(
     connectedAccountId: string,
     provider: IntegrationProvider,
+    returnTo?: string,
   ): string {
-    const url = new URL(this.config.oauth.successUrl);
+    const base = returnTo ?? this.config.oauth.successUrl;
+    const url = new URL(base);
+    url.searchParams.set('status', 'success');
     url.searchParams.set('connectedAccountId', connectedAccountId);
     url.searchParams.set('provider', provider);
     return url.toString();
@@ -278,8 +314,11 @@ export class OAuthService {
   private errorRedirect(
     reason: string,
     provider: IntegrationProvider,
+    returnTo?: string,
   ): string {
-    const url = new URL(this.config.oauth.errorUrl);
+    const base = returnTo ?? this.config.oauth.errorUrl;
+    const url = new URL(base);
+    url.searchParams.set('status', 'error');
     url.searchParams.set('reason', reason.slice(0, 200));
     url.searchParams.set('provider', provider);
     return url.toString();
