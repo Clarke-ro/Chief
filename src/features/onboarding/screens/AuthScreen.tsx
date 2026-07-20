@@ -31,6 +31,7 @@ export function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const continueNext = () => router.replace('/onboarding/connect');
   const isLight = scheme === 'light';
@@ -38,9 +39,25 @@ export function AuthScreen() {
   const placeholderColor = colors.textTertiary;
   const canSubmit = email.trim().length > 0 && password.length >= 8 && !submitting;
 
-  const handleSubmit = async () => {
-    if (!canSubmit) return;
+  const showError = (title: string, message: string) => {
+    setErrorMessage(message);
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.alert(`${title}\n\n${message}`);
+      return;
+    }
+    Alert.alert(title, message);
+  };
 
+  const handleSubmit = async () => {
+    if (!canSubmit) {
+      showError(
+        mode === 'signIn' ? 'Sign in' : 'Sign up',
+        'Enter your email and a password with at least 8 characters.',
+      );
+      return;
+    }
+
+    setErrorMessage(null);
     setSubmitting(true);
     try {
       if (mode === 'signIn') {
@@ -53,8 +70,10 @@ export function AuthScreen() {
       const message =
         error instanceof AuthServiceError
           ? error.message
-          : 'Could not reach Chief. Check your connection and try again.';
-      Alert.alert(mode === 'signIn' ? 'Sign in failed' : 'Sign up failed', message);
+          : error instanceof Error && error.message.trim()
+            ? error.message
+            : 'Could not reach Chief. Check your connection and try again.';
+      showError(mode === 'signIn' ? 'Sign in failed' : 'Sign up failed', message);
     } finally {
       setSubmitting(false);
     }
@@ -121,6 +140,10 @@ export function AuthScreen() {
                 },
               ]}
             />
+
+            {errorMessage ? (
+              <Text style={[styles.errorText, { color: colors.danger }]}>{errorMessage}</Text>
+            ) : null}
 
             <TouchableOpacity
               accessibilityRole="button"
@@ -198,6 +221,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: spacing[4],
+  },
+  errorText: {
+    ...typography.subhead,
+    fontWeight: '500',
   },
   signInLabel: {
     fontSize: 16,

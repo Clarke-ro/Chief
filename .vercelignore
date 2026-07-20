@@ -1,0 +1,14 @@
+backend
+.expo
+android
+ios
+*.md
+agent-transcripts
+.debug
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.*
+scripts
+debug-*.log

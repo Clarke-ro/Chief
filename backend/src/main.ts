@@ -27,6 +27,29 @@ async function bootstrap() {
   // Railway / reverse proxies terminate TLS in front of the app.
   expressApp.set('trust proxy', 1);
 
+  const allowedHeaders =
+    'Content-Type,Authorization,Accept,expo-origin,x-skip-oauth-proxy';
+
+  // Express CORS before Better Auth — Nest enableCors does not cover the raw /api/auth mount.
+  expressApp.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (typeof origin === 'string' && config.corsOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Headers', allowedHeaders);
+      res.setHeader(
+        'Access-Control-Allow-Methods',
+        'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+      );
+      res.setHeader('Vary', 'Origin');
+    }
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
+
   // Better Auth Expo: copy expo-origin → origin for native clients (Expo Go sends no Origin header).
   expressApp.use('/api/auth', (req, _res, next) => {
     if (!req.headers.origin && req.headers['expo-origin']) {

@@ -30,6 +30,10 @@ function readOnboardingCompleted(): boolean {
 /** Push preference into RN Appearance so native chrome can follow when possible. */
 export function applyThemePreference(theme: ThemePreference) {
   const next: ColorSchemeName = theme === 'system' ? 'unspecified' : theme;
+  // Web RN Appearance may not implement setColorScheme — calling it throws and blanks the app.
+  if (typeof Appearance.setColorScheme !== 'function') {
+    return;
+  }
   Appearance.setColorScheme(next);
 }
 
