@@ -12,6 +12,7 @@ import { MembershipService } from '../membership/membership.service';
 import { WorkspaceService } from '../workspace/workspace.service';
 import {
   type BriefingSignalDto,
+  type FocusActionDto,
   type FocusItemDto,
   type HomeBriefDto,
   isHomeBriefDto,
@@ -450,10 +451,7 @@ export class BriefingService {
       estimatedTime,
       priority: priorityFromScore(relevance, task.priority),
       confidence: clamp01(Math.max(task.confidence ?? 0.7, relevance)),
-      actions: [
-        { id: `${task.id}-done`, label: 'Mark done', tone: 'accent' },
-        { id: `${task.id}-ask`, label: 'Ask Chief', execution: 'ask_chief' },
-      ],
+      actions: buildTaskFocusActions(task.id, narrative.workKind),
       urgencyLabel:
         narrative.workKind === 'deadline'
           ? 'Deadline'
@@ -495,7 +493,7 @@ export class BriefingService {
       bodyText: email.bodyText,
     });
     const estimatedTime = estimatedMinutesFor(narrative.workKind);
-    const gmailUrl = gmailThreadUrl(email.provider, email.threadId);
+    const gmailUrl = gmailHandoffUrl(email.provider, email.threadId, subject);
 
     return {
       id: `mail-${email.id}`,
@@ -505,24 +503,7 @@ export class BriefingService {
       estimatedTime,
       priority: priorityFromScore(relevance),
       confidence: clamp01(relevance),
-      actions: [
-        { id: `${email.id}-done`, label: 'Mark done', tone: 'accent' },
-        { id: `${email.id}-ask`, label: 'Ask Chief', execution: 'ask_chief' },
-        ...(gmailUrl
-          ? [
-              {
-                id: `${email.id}-open`,
-                label: contextualOpenLabel(narrative.workKind),
-                execution: 'handoff' as const,
-                handoff: {
-                  target: 'gmail' as const,
-                  url: gmailUrl,
-                  summary: gmailHandoffSummary(narrative.workKind),
-                },
-              },
-            ]
-          : []),
-      ],
+      actions: buildEmailFocusActions(email.id, narrative.workKind, gmailUrl),
       urgencyLabel: urgencyForWorkKind(narrative.workKind, relevance),
       aboutTitle: narrative.aboutTitle,
       aboutBody: narrative.aboutBody,
@@ -554,7 +535,7 @@ export class BriefingService {
       bodyText: event.location,
     });
     const estimatedTime = estimatedMinutesFor(narrative.workKind);
-    const calendarUrl = googleCalendarEventUrl(event.provider, event.htmlLink);
+    const calendarUrl = googleCalendarHandoffUrl(event.provider, event.htmlLink);
     return {
       id: `event-${event.id}`,
       platform: mapPlatform('calendar', event.provider, 'calendar'),
@@ -563,24 +544,7 @@ export class BriefingService {
       estimatedTime,
       priority: priorityFromScore(relevance),
       confidence: clamp01(relevance),
-      actions: [
-        { id: `${event.id}-done`, label: 'Mark done', tone: 'accent' },
-        { id: `${event.id}-ask`, label: 'Ask Chief', execution: 'ask_chief' },
-        ...(calendarUrl
-          ? [
-              {
-                id: `${event.id}-open`,
-                label: contextualOpenLabel(narrative.workKind),
-                execution: 'handoff' as const,
-                handoff: {
-                  target: 'calendar' as const,
-                  url: calendarUrl,
-                  summary: calendarHandoffSummary(narrative.workKind),
-                },
-              },
-            ]
-          : []),
-      ],
+      actions: buildEventFocusActions(event.id, narrative.workKind, calendarUrl),
       urgencyLabel: 'Meeting',
       aboutTitle: narrative.aboutTitle,
       aboutBody: narrative.aboutBody,
@@ -749,36 +713,190 @@ function needsPresentationRefresh(brief: HomeBriefDto): boolean {
   ) {
     return true;
   }
+  // Sparse / basics-only action sets (Mark done + Ask Chief ± one open) should recompose.
+  if (
+    brief.focus.some((item) => {
+      if (item.actions.length < 4) return true;
+      return item.actions.every(
+        (action) =>
+          action.id.endsWith('-done') ||
+          action.id.endsWith('-ask') ||
+          action.id.endsWith('-open'),
+      );
+    })
+  ) {
+    return true;
+  }
+  // Mail/calendar focus without a handoff URL should recompose with fallback destinations.
+  if (
+    brief.focus.some(
+      (item) =>
+        (item.id.startsWith('mail-') || item.id.startsWith('event-')) &&
+        !item.actions.some(
+          (action) => action.execution === 'handoff' && Boolean(action.handoff?.url),
+        ),
+    )
+  ) {
+    return true;
+  }
   return false;
 }
 
-function gmailThreadUrl(
+function buildEmailFocusActions(
+  emailId: string,
+  workKind: WorkKind,
+  gmailUrl: string | null,
+): FocusActionDto[] {
+  const actions: FocusActionDto[] = [
+    { id: `${emailId}-done`, label: 'Mark done', tone: 'accent' },
+    { id: `${emailId}-ask`, label: 'Ask Chief', execution: 'ask_chief' },
+  ];
+
+  if (gmailUrl) {
+    actions.push({
+      id: `${emailId}-open`,
+      label: contextualOpenLabel(workKind),
+      execution: 'handoff',
+      handoff: {
+        target: 'gmail',
+        url: gmailUrl,
+        summary: gmailHandoffSummary(workKind),
+      },
+    });
+  }
+
+  switch (workKind) {
+    case 'invoice':
+      actions.push(
+        { id: `${emailId}-draft`, label: 'Draft dispute' },
+        { id: `${emailId}-explain`, label: 'What do I owe?', execution: 'ask_chief' },
+      );
+      break;
+    case 'security':
+      actions.push(
+        { id: `${emailId}-explain`, label: 'Is this safe?', execution: 'ask_chief' },
+        { id: `${emailId}-summar`, label: 'Summarize alert', execution: 'ask_chief' },
+      );
+      break;
+    case 'deadline':
+      actions.push(
+        { id: `${emailId}-plan`, label: 'Make a plan', execution: 'ask_chief' },
+        { id: `${emailId}-block`, label: 'Block time' },
+      );
+      break;
+    case 'career':
+      actions.push(
+        { id: `${emailId}-draft`, label: 'Draft reply' },
+        { id: `${emailId}-prep`, label: 'Prep me', execution: 'ask_chief' },
+      );
+      break;
+    case 'approval':
+      actions.push(
+        { id: `${emailId}-draft`, label: 'Draft decision' },
+        { id: `${emailId}-explain`, label: 'Explain ask', execution: 'ask_chief' },
+      );
+      break;
+    case 'document':
+      actions.push(
+        { id: `${emailId}-summar`, label: 'Summarize', execution: 'ask_chief' },
+        { id: `${emailId}-draft`, label: 'Draft feedback' },
+      );
+      break;
+    default:
+      actions.push(
+        { id: `${emailId}-draft`, label: 'Draft reply' },
+        { id: `${emailId}-explain`, label: 'Explain', execution: 'ask_chief' },
+        { id: `${emailId}-summar`, label: 'Summarize', execution: 'ask_chief' },
+      );
+      break;
+  }
+
+  return actions;
+}
+
+function buildEventFocusActions(
+  eventId: string,
+  workKind: WorkKind,
+  calendarUrl: string | null,
+): FocusActionDto[] {
+  const actions: FocusActionDto[] = [
+    { id: `${eventId}-done`, label: 'Mark done', tone: 'accent' },
+    { id: `${eventId}-ask`, label: 'Ask Chief', execution: 'ask_chief' },
+  ];
+
+  if (calendarUrl) {
+    actions.push({
+      id: `${eventId}-open`,
+      label: contextualOpenLabel(workKind === 'meeting' ? 'meeting' : workKind),
+      execution: 'handoff',
+      handoff: {
+        target: 'calendar',
+        url: calendarUrl,
+        summary: calendarHandoffSummary(workKind),
+      },
+    });
+  }
+
+  actions.push(
+    { id: `${eventId}-agenda`, label: 'Prep agenda', execution: 'ask_chief' },
+    { id: `${eventId}-reschedule`, label: 'Reschedule' },
+    { id: `${eventId}-find`, label: 'Find time' },
+  );
+
+  return actions;
+}
+
+function buildTaskFocusActions(taskId: string, workKind: WorkKind): FocusActionDto[] {
+  return [
+    { id: `${taskId}-done`, label: 'Mark done', tone: 'accent' },
+    { id: `${taskId}-ask`, label: 'Ask Chief', execution: 'ask_chief' },
+    { id: `${taskId}-plan`, label: 'Make a plan', execution: 'ask_chief' },
+    { id: `${taskId}-block`, label: 'Block time' },
+    {
+      id: `${taskId}-start`,
+      label: contextualOpenLabel(workKind === 'task' ? 'task' : workKind),
+      execution: 'ask_chief',
+    },
+  ];
+}
+
+function gmailHandoffUrl(
   provider: IntegrationProvider,
   threadId: string | null,
+  subject?: string | null,
 ): string | null {
   if (provider !== IntegrationProvider.google) return null;
   const id = threadId?.trim();
-  if (!id || id.length > 256 || /[\u0000-\u001F\u007F]/.test(id)) return null;
-  return `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(id)}`;
+  if (id && id.length <= 256 && !/[\u0000-\u001F\u007F]/.test(id)) {
+    return `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(id)}`;
+  }
+  const query = subject?.trim();
+  if (query) {
+    return `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(query)}`;
+  }
+  return 'https://mail.google.com/mail/u/0/#inbox';
 }
 
-function googleCalendarEventUrl(
+function googleCalendarHandoffUrl(
   provider: IntegrationProvider,
   htmlLink: string | null,
 ): string | null {
-  if (provider !== IntegrationProvider.google || !htmlLink) return null;
-
-  try {
-    const url = new URL(htmlLink);
-    const host = url.hostname.toLowerCase();
-    const isCalendarUrl =
-      host === 'calendar.google.com' ||
-      (host === 'www.google.com' && url.pathname.startsWith('/calendar/'));
-    if (url.protocol !== 'https:' || !isCalendarUrl) return null;
-    return url.toString();
-  } catch {
-    return null;
+  if (provider !== IntegrationProvider.google) return null;
+  if (htmlLink) {
+    try {
+      const url = new URL(htmlLink);
+      const host = url.hostname.toLowerCase();
+      const isCalendarUrl =
+        host === 'calendar.google.com' ||
+        (host === 'www.google.com' && url.pathname.startsWith('/calendar/'));
+      if (url.protocol === 'https:' && isCalendarUrl) {
+        return url.toString();
+      }
+    } catch {
+      // fall through to calendar home
+    }
   }
+  return 'https://calendar.google.com/calendar/u/0/r';
 }
 
 function gmailHandoffSummary(workKind: WorkKind): string {

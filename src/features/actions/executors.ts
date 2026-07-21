@@ -1,7 +1,8 @@
-import { Alert, Linking } from 'react-native';
+import { Linking } from 'react-native';
 
 import { handoffLabel } from '@/features/actions/catalog';
 import type { ActionableTask } from '@/features/actions/types';
+import { confirmAction, notifyAlert } from '@/services/confirm';
 import { assertSafeExternalUrl, summarizeUrlForDisplay } from '@/services/safeUrl';
 import { useCanvasStore } from '@/stores/canvasStore';
 
@@ -12,28 +13,9 @@ export function openCanvas(task: ActionableTask) {
 
 /** Explain why an action cannot execute instead of falling back to another app. */
 export function showUnavailableAction(task: Pick<ActionableTask, 'summary'>) {
-  Alert.alert(
+  notifyAlert(
     'Action unavailable',
     task.summary ?? 'Chief does not have a verified link for this item yet.',
-  );
-}
-
-function confirmAndOpen(title: string, url: string, summary?: string) {
-  const preview = summarizeUrlForDisplay(url);
-  Alert.alert(
-    title,
-    summary ? `${summary}\n\nOpen ${preview}?` : `Continue in another app?\n\n${preview}`,
-    [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Open',
-        onPress: () => {
-          void Linking.openURL(url).catch(() => {
-            Alert.alert(title, 'Could not open that link.');
-          });
-        },
-      },
-    ],
   );
 }
 
@@ -43,20 +25,39 @@ export async function openHandoff(task: ActionableTask) {
   const safety = assertSafeExternalUrl(task.url);
 
   if (!safety.ok) {
-    showUnavailableAction(task);
+    showUnavailableAction({
+      summary: task.summary ?? 'Chief does not have a verified link for this item yet.',
+    });
     return;
   }
 
   try {
     const can = await Linking.canOpenURL(safety.url);
     if (!can) {
-      Alert.alert(title, task.summary ?? 'This app is not available on this device.');
+      notifyAlert(title, task.summary ?? 'This app is not available on this device.');
       return;
     }
   } catch {
-    Alert.alert(title, 'Could not verify that link.');
+    notifyAlert(title, 'Could not verify that link.');
     return;
   }
 
-  confirmAndOpen(title, safety.url, task.summary);
+  const preview = summarizeUrlForDisplay(safety.url);
+  const message = task.summary
+    ? `${task.summary}\n\nOpen ${preview}?`
+    : `Continue in another app?\n\n${preview}`;
+
+  const ok = await confirmAction({
+    title,
+    message,
+    confirmLabel: 'Open',
+    cancelLabel: 'Cancel',
+  });
+  if (!ok) return;
+
+  try {
+    await Linking.openURL(safety.url);
+  } catch {
+    notifyAlert(title, 'Could not open that link.');
+  }
 }

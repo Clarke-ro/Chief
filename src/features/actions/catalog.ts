@@ -213,10 +213,11 @@ export function resolveFocusActionable(
   action: FocusActionInput,
 ): ActionableTask {
   const id = action.id.toLowerCase();
+  const handoffUrl = action.handoff?.url?.trim();
 
-  if (action.execution === 'handoff') {
-    const url = action.handoff?.url?.trim();
-    if (!url) {
+  // Prefer an explicit source URL whenever present (Reply / Pay / Prepare / …).
+  if (action.execution === 'handoff' || handoffUrl) {
+    if (!handoffUrl) {
       return {
         id: action.id,
         label: action.label,
@@ -231,7 +232,7 @@ export function resolveFocusActionable(
       label: action.label,
       execution: 'handoff',
       handoffTarget: handoffTargetFor(action.handoff?.target),
-      url,
+      url: handoffUrl,
       title: focusTitle,
       summary: action.handoff?.summary ?? 'Open the source item to continue.',
       context: focusTitle,
@@ -261,7 +262,7 @@ export function resolveFocusActionable(
     };
   }
 
-  if (id.includes('draft') || id.includes('send')) {
+  if (id.includes('draft') || id.includes('send') || id.includes('dispute')) {
     return resolveActionableTask(action, {
       execution: 'canvas',
       canvasKind: 'email',
@@ -270,7 +271,7 @@ export function resolveFocusActionable(
     });
   }
 
-  if (id.includes('reschedule') || id.includes('find')) {
+  if (id.includes('reschedule') || id.includes('find') || id.includes('block')) {
     return resolveActionableTask(action, {
       execution: 'canvas',
       canvasKind: 'schedule',
@@ -279,7 +280,24 @@ export function resolveFocusActionable(
     });
   }
 
-  if (id.includes('merge') || id.includes('open') || id.includes('pr')) {
+  if (id.includes('agenda') || id.includes('prep') || id.includes('plan')) {
+    return {
+      id: action.id,
+      label: action.label,
+      execution: 'canvas',
+      canvasKind: 'notes',
+      title: focusTitle,
+      summary: 'Continue with Chief in chat.',
+      draft: `Help me prepare and plan next steps for: ${focusTitle}`,
+      context: 'ask-chief',
+    };
+  }
+
+  // Only block unverified open/merge when this chip claimed a source handoff.
+  if (
+    (id.includes('merge') || id.endsWith('-open') || id.includes('-pr')) &&
+    action.execution !== 'handoff'
+  ) {
     return {
       id: action.id,
       label: action.label,
