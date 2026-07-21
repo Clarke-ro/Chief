@@ -681,8 +681,13 @@ function needsPresentationRefresh(brief: HomeBriefDto): boolean {
   }
   // Older headlines were short subject-style truncations (< 40 chars often).
   if (
-    brief.focus.some((item) => /^(Respond to|Follow up:|Submit:|Approve:)/i.test(item.title))
+    brief.focus.some((item) =>
+      /^(Respond to|Follow up:|Submit:|Approve:)/i.test(item.title),
+    )
   ) {
+    return true;
+  }
+  if (brief.briefing.some((signal) => /^Respond to /i.test(signal.title))) {
     return true;
   }
   return false;
