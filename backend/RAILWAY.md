@@ -49,4 +49,12 @@ Railway service **Root Directory** = `backend`. Do not split repos unless the te
 | `CORS_ORIGINS` | Expo / web origins — include `chief://` for the mobile app |
 | Provider `*_CLIENT_ID` / `*_CLIENT_SECRET` | As needed (Microsoft optional) |
 
+## Google Tasks
+
+Home task sync uses the Google Tasks API (`https://www.googleapis.com/auth/tasks`).
+
+1. In Google Cloud Console → APIs & Services → enable **Google Tasks API**
+2. Existing connected Google accounts must **reconnect** (new scope) before tasks appear
+3. After reconnect, Home pull-to-refresh runs email + calendar + tasks inline
+
 `RAILWAY_PUBLIC_DOMAIN` is injected by Railway when a public domain exists.

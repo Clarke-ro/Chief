@@ -18,6 +18,14 @@ export const DEFAULT_SYNC_POLICIES: SyncPolicyDefinition[] = [
     allowAutomaticHistorical: false,
   },
   {
+    provider: IntegrationProvider.google,
+    resource: SyncResource.tasks,
+    initialLookbackDays: 30,
+    initialLookaheadDays: 60,
+    scheduledIntervalMinutes: 15,
+    allowAutomaticHistorical: false,
+  },
+  {
     provider: IntegrationProvider.microsoft,
     resource: SyncResource.email,
     initialLookbackDays: 5,
@@ -60,6 +68,7 @@ export const CAPABILITY_TO_RESOURCE: Record<string, SyncResource> = {
   gmail: SyncResource.email,
   outlook: SyncResource.email,
   calendar: SyncResource.calendar,
+  tasks: SyncResource.tasks,
   slack: SyncResource.messages,
   github: SyncResource.tasks,
   notion: SyncResource.tasks,

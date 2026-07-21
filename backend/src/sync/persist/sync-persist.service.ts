@@ -3,6 +3,7 @@ import { SyncResource, type Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { normalizeGoogleCalendarEvent } from '../normalize/calendar-normalizer';
 import { normalizeGmailMessage } from '../normalize/gmail-normalizer';
+import { normalizeGoogleTask } from '../normalize/tasks-normalizer';
 import type { RawSyncBatch } from '../sync.types';
 
 /**
@@ -37,6 +38,9 @@ export class SyncPersistService {
         break;
       case SyncResource.calendar:
         persisted = await this.persistCalendar(batch);
+        break;
+      case SyncResource.tasks:
+        persisted = await this.persistTasks(batch);
         break;
       default:
         this.logger.debug(
@@ -184,6 +188,62 @@ export class SyncPersistService {
           htmlLink: normalized.htmlLink,
           raw: normalized.raw as Prisma.InputJsonValue,
           syncedAt: now,
+        },
+      });
+      count += 1;
+    }
+    return count;
+  }
+
+  private async persistTasks(batch: RawSyncBatch): Promise<number> {
+    let count = 0;
+    for (const item of batch.items) {
+      const normalized = normalizeGoogleTask(item.payload, item.providerItemId);
+      if (!normalized) continue;
+      if (!batch.connectedAccountId) continue;
+
+      const now = new Date();
+      await this.prisma.task.upsert({
+        where: {
+          connectedAccountId_providerTaskId: {
+            connectedAccountId: batch.connectedAccountId,
+            providerTaskId: normalized.providerTaskId,
+          },
+        },
+        create: {
+          workspaceId: batch.workspaceId,
+          connectedAccountId: batch.connectedAccountId,
+          provider: batch.provider,
+          providerTaskId: normalized.providerTaskId,
+          title: normalized.title,
+          description: normalized.description,
+          details: normalized.details,
+          platform: normalized.platform,
+          priority: normalized.priority,
+          status: normalized.status,
+          section: normalized.section,
+          estimatedTime: normalized.estimatedTime,
+          confidence: normalized.confidence,
+          dueAt: normalized.dueAt,
+          dueLabel: normalized.dueLabel,
+          completedAt: normalized.completedAt,
+          meta: normalized.meta as Prisma.InputJsonValue,
+        },
+        update: {
+          title: normalized.title,
+          description: normalized.description,
+          details: normalized.details,
+          platform: normalized.platform,
+          priority: normalized.priority,
+          status: normalized.status,
+          section: normalized.section,
+          estimatedTime: normalized.estimatedTime,
+          confidence: normalized.confidence,
+          dueAt: normalized.dueAt,
+          dueLabel: normalized.dueLabel,
+          completedAt: normalized.completedAt,
+          meta: normalized.meta as Prisma.InputJsonValue,
+          updatedAt: now,
         },
       });
       count += 1;

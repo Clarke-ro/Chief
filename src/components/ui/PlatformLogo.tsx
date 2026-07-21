@@ -144,6 +144,7 @@ export const platformLabels: Record<PlatformId, string> = {
   slack: 'Slack',
   github: 'GitHub',
   notion: 'Notion',
-  asana: 'Asana',
+  // Google Tasks reuse this mark until a dedicated Tasks icon ships.
+  asana: 'Tasks',
   trello: 'Trello',
 };

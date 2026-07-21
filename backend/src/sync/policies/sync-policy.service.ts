@@ -61,7 +61,13 @@ export class SyncPolicyService {
       };
     }
 
-    if (!input.hasCursor || input.reason === 'onboarding') {
+    // Manual (Home pull / Connect) and onboarding always re-window so Home
+    // isn't stuck after an empty incremental delta.
+    if (
+      !input.hasCursor ||
+      input.reason === 'onboarding' ||
+      input.reason === 'manual'
+    ) {
       return {
         from: daysAgo(now, input.policy.initialLookbackDays),
         to: daysAhead(now, lookaheadDays),

@@ -46,7 +46,13 @@ export class BriefingService {
       },
     });
 
-    if (existing && isFresh(existing.generatedAt) && isHomeBriefDto(existing.payload)) {
+    // Never serve a fresh-but-empty cache — sync may have landed after first paint.
+    if (
+      existing &&
+      isFresh(existing.generatedAt) &&
+      isHomeBriefDto(existing.payload) &&
+      hasBriefContent(existing.payload)
+    ) {
       return {
         ...existing.payload,
         userName: firstName(user.name) || existing.payload.userName,
@@ -83,11 +89,11 @@ export class BriefingService {
   }
 
   private async composeBrief(user: AuthUser, workspaceId: string): Promise<HomeBriefDto> {
-    const dayStart = utcDateOnly();
-    const dayEnd = new Date(dayStart);
-    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+    const now = new Date();
+    const calendarFrom = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+    const calendarTo = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    const [tasks, emails, events] = await Promise.all([
+    const [tasks, unreadEmails, recentEmails, events] = await Promise.all([
       this.prisma.task.findMany({
         where: {
           workspaceId,
@@ -105,15 +111,24 @@ export class BriefingService {
         orderBy: { receivedAt: 'desc' },
         take: 8,
       }),
+      this.prisma.email.findMany({
+        where: { workspaceId },
+        orderBy: { receivedAt: 'desc' },
+        take: 8,
+      }),
       this.prisma.calendarEvent.findMany({
         where: {
           workspaceId,
-          startsAt: { gte: dayStart, lt: dayEnd },
+          startsAt: { gte: calendarFrom, lt: calendarTo },
+          NOT: { status: 'cancelled' },
         },
         orderBy: { startsAt: 'asc' },
         take: 8,
       }),
     ]);
+
+    // Prefer unread; fall back to newest synced mail (many inboxes have 0 UNREAD).
+    const emails = unreadEmails.length > 0 ? unreadEmails : recentEmails;
 
     // Prisma enum order is high/medium/low — reorder so high comes first.
     const priorityRank: Record<TaskPriority, number> = {
@@ -123,7 +138,12 @@ export class BriefingService {
     };
     tasks.sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority]);
 
-    const focus: FocusItemDto[] = tasks.map((task) => this.taskToFocus(task));
+    let focus: FocusItemDto[] = tasks.map((task) => this.taskToFocus(task));
+    // Until task sync exists, surface top mail as focus so Home isn't blank.
+    if (focus.length === 0 && emails.length > 0) {
+      focus = emails.slice(0, 5).map((email, index) => this.emailToFocus(email, index));
+    }
+
     const briefing: BriefingSignalDto[] = [
       ...emails.map((email) => this.emailToSignal(email)),
       ...events.map((event) => this.eventToSignal(event)),
@@ -145,7 +165,11 @@ export class BriefingService {
       'Clear your top focus items early and the rest of the day opens up.';
     if (openCount === 0 && signalCount === 0) {
       successInsight =
-        'Connect apps and sync your workspace to build a live brief from real work.';
+        'Connect Google and pull to refresh — sync needs mail or calendar before the brief fills.';
+    } else if (tasks.length === 0 && emails.length > 0) {
+      successInsight = unreadEmails.length
+        ? 'Unread mail is queued as today’s priorities until task sync lands.'
+        : 'Recent mail is queued as today’s priorities until task sync lands.';
     } else if (openCount === 0) {
       successInsight = 'No open focus items — scan briefing signals for anything urgent.';
     } else if (openCount <= 3) {
@@ -209,6 +233,42 @@ export class BriefingService {
       delayImpact:
         'Leaving this open may push other commitments later in the day.',
       aiRecommendation: 'Start this in your next focused block.',
+    };
+  }
+
+  private emailToFocus(
+    email: {
+      id: string;
+      provider: IntegrationProvider;
+      subject: string | null;
+      snippet: string | null;
+      fromName: string | null;
+      fromAddress: string | null;
+      isUnread: boolean;
+    },
+    index: number,
+  ): FocusItemDto {
+    const from = email.fromName || email.fromAddress || 'Inbox';
+    return {
+      id: `mail-${email.id}`,
+      platform: mapPlatform('gmail', email.provider, 'gmail'),
+      title: email.subject?.trim() || 'Email thread',
+      reason: email.isUnread ? `Unread from ${from}` : `Recent from ${from}`,
+      estimatedTime: '10 min',
+      priority: index < 2 ? 'high' : 'medium',
+      confidence: email.isUnread ? 0.82 : 0.7,
+      actions: [
+        { id: `${email.id}-ask`, label: 'Ask Chief', tone: 'accent' },
+        { id: `${email.id}-open`, label: 'Open' },
+      ],
+      urgencyLabel: email.isUnread ? 'Unread' : 'Recent',
+      whyImportant:
+        email.snippet?.trim() ||
+        'This thread was pulled from your connected Gmail account.',
+      delayImpact: 'Leaving inbox threads open stacks follow-ups for later today.',
+      aiRecommendation: email.isUnread
+        ? 'Skim and reply or archive.'
+        : 'Check whether a follow-up is still needed.',
     };
   }
 
@@ -277,6 +337,10 @@ function isFresh(generatedAt: Date, maxAgeMs = 15 * 60 * 1000): boolean {
   return Date.now() - generatedAt.getTime() < maxAgeMs;
 }
 
+function hasBriefContent(brief: HomeBriefDto): boolean {
+  return brief.focus.length > 0 || brief.briefing.length > 0;
+}
+
 function firstName(name?: string | null): string {
   const trimmed = name?.trim();
   if (!trimmed) return '';
@@ -298,7 +362,10 @@ function mapPlatform(
 
   switch (provider) {
     case IntegrationProvider.google:
-      return normalized.includes('cal') ? 'calendar' : 'gmail';
+      if (normalized.includes('cal')) return 'calendar';
+      // Google Tasks map to the task-shaped platform mark until a dedicated icon exists.
+      if (normalized === 'asana' || normalized.includes('task')) return 'asana';
+      return 'gmail';
     case IntegrationProvider.microsoft:
       return normalized.includes('cal') || normalized.includes('outlook')
         ? 'calendar'

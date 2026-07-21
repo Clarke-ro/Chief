@@ -3,6 +3,7 @@ import { IntegrationProvider, SyncResource } from '@prisma/client';
 import {
   GoogleCalendarFetcher,
   GoogleGmailFetcher,
+  GoogleTasksFetcher,
 } from '../providers/google';
 import type { FetchContext, RawSyncBatch, SyncResourceFetcher } from '../sync.types';
 import { emptyBatch } from './sync-fetcher';
@@ -32,10 +33,12 @@ export class SyncFetcherRegistry {
   constructor(
     googleGmail: GoogleGmailFetcher,
     googleCalendar: GoogleCalendarFetcher,
+    googleTasks: GoogleTasksFetcher,
   ) {
     this.fetchers = [
       googleGmail,
       googleCalendar,
+      googleTasks,
       new StubResourceFetcher(IntegrationProvider.microsoft, SyncResource.email),
       new StubResourceFetcher(IntegrationProvider.microsoft, SyncResource.calendar),
       new StubResourceFetcher(IntegrationProvider.slack, SyncResource.messages),

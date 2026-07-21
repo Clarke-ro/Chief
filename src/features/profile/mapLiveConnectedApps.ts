@@ -12,6 +12,7 @@ export const PROFILE_MANAGE_APPS: ReadonlyArray<{
 }> = [
   { id: 'gmail', platform: 'gmail', name: 'Gmail', provider: 'google' },
   { id: 'calendar', platform: 'calendar', name: 'Google Calendar', provider: 'google' },
+  { id: 'tasks', platform: 'asana', name: 'Google Tasks', provider: 'google' },
   { id: 'slack', platform: 'slack', name: 'Slack', provider: 'slack' },
   { id: 'github', platform: 'github', name: 'GitHub', provider: 'github' },
   { id: 'notion', platform: 'notion', name: 'Notion', provider: 'notion' },

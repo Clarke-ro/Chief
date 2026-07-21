@@ -68,28 +68,20 @@ export function HomeScreen() {
 
   const kickedSync = useRef(false);
 
-  useEffect(() => {
-    if (!env.liveHomeBrief || !sessionReady || !hasSession) return;
-    void refreshBrief();
-  }, [hasSession, refreshBrief, sessionReady]);
-
-  // If Google connected but onboarding sync never ran (empty live brief), kick sync once.
+  // Sync first (API pulls Gmail/Calendar), then load brief — avoids caching an empty brief.
   useEffect(() => {
     if (!env.liveHomeBrief || !sessionReady || !hasSession || kickedSync.current) return;
-    if (brief.focus.length > 0 || brief.briefing.length > 0) return;
     kickedSync.current = true;
     void (async () => {
       try {
         const workspaceId = await ensureActiveWorkspaceId();
-        const started = await syncRepository.runFirstConnection(workspaceId);
-        if (started) {
-          await refreshBrief();
-        }
+        await syncRepository.runFirstConnection(workspaceId);
       } catch {
-        // Keep empty state — user can pull to refresh later.
+        // Still try to load whatever is already persisted.
       }
+      await refreshBrief();
     })();
-  }, [brief.briefing.length, brief.focus.length, hasSession, refreshBrief, sessionReady]);
+  }, [hasSession, refreshBrief, sessionReady]);
 
   const openFocus = useCallback((id: string) => {
     workspaceNav.focus(id);
@@ -121,11 +113,19 @@ export function HomeScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
+      if (env.liveHomeBrief && hasSession) {
+        try {
+          const workspaceId = await ensureActiveWorkspaceId();
+          await syncRepository.runFirstConnection(workspaceId);
+        } catch {
+          // Brief refresh still runs with whatever is already persisted.
+        }
+      }
       await refreshBrief();
     } finally {
       if (mounted.current) setRefreshing(false);
     }
-  }, [mounted, refreshBrief]);
+  }, [hasSession, mounted, refreshBrief]);
 
   const toggleSearch = () => {
     setShowSearch((prev) => {

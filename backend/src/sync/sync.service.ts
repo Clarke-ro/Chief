@@ -183,7 +183,7 @@ export class SyncService {
 
   private inlineResourcesFor(provider: IntegrationProvider): SyncResource[] {
     if (provider === IntegrationProvider.google) {
-      return [SyncResource.email, SyncResource.calendar];
+      return [SyncResource.email, SyncResource.calendar, SyncResource.tasks];
     }
     if (provider === IntegrationProvider.microsoft) {
       return [SyncResource.email, SyncResource.calendar];

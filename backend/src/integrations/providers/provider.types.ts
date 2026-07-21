@@ -4,6 +4,7 @@ export type ProviderCapability =
   | 'gmail'
   | 'calendar'
   | 'drive'
+  | 'tasks'
   | 'outlook'
   | 'onedrive'
   | 'slack'

@@ -183,7 +183,7 @@ export function ProfileScreen() {
           app.provider === 'google' ? 'Disconnect Google?' : `Disconnect ${app.name}?`;
         const disconnectBody =
           app.provider === 'google'
-            ? 'This removes Gmail and Calendar access for Chief.'
+            ? 'This removes Gmail, Calendar, and Tasks access for Chief.'
             : app.accountLabel
               ? `Connected as ${app.accountLabel}.\nChief only reads what you allow.`
               : 'Chief only reads what you allow.';

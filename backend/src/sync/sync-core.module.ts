@@ -6,7 +6,11 @@ import { SyncOrchestratorService } from './orchestrator/sync-orchestrator.servic
 import { SyncPersistService } from './persist/sync-persist.service';
 import { SyncPipelineService } from './pipeline/sync-pipeline.service';
 import { SyncPolicyService } from './policies/sync-policy.service';
-import { GoogleCalendarFetcher, GoogleGmailFetcher } from './providers/google';
+import {
+  GoogleCalendarFetcher,
+  GoogleGmailFetcher,
+  GoogleTasksFetcher,
+} from './providers/google';
 
 /**
  * Sync core — fetchers, pipeline, orchestrator.
@@ -17,6 +21,7 @@ import { GoogleCalendarFetcher, GoogleGmailFetcher } from './providers/google';
   providers: [
     GoogleGmailFetcher,
     GoogleCalendarFetcher,
+    GoogleTasksFetcher,
     SyncFetcherRegistry,
     SyncPolicyService,
     SyncPersistService,

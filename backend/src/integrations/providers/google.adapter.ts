@@ -19,6 +19,7 @@ const SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/calendar',
   'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/tasks',
 ];
 
 @Injectable()
@@ -26,8 +27,8 @@ export class GoogleAdapter extends ProviderAdapter {
   readonly definition: ProviderDefinition = {
     id: IntegrationProvider.google,
     displayName: 'Google',
-    description: 'Gmail, Google Calendar, and Google Drive',
-    capabilities: ['gmail', 'calendar', 'drive'],
+    description: 'Gmail, Google Calendar, Google Tasks, and Drive',
+    capabilities: ['gmail', 'calendar', 'tasks', 'drive'],
     scopes: SCOPES,
     supportsRefresh: true,
     supportsRevoke: true,
