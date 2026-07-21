@@ -102,7 +102,7 @@ export function buildConfiguration(env: Env): AppConfig {
       apiKey: env.OPENAI_API_KEY,
       model: env.AI_MODEL || 'gpt-5.6',
       geminiApiKey: env.GEMINI_API_KEY,
-      geminiModel: env.GEMINI_MODEL || 'gemini-2.5-flash',
+      geminiModel: env.GEMINI_MODEL || 'gemini-3.6-flash',
     },
     logLevel: env.LOG_LEVEL,
     swaggerEnabled:

@@ -61,8 +61,8 @@ export const envSchema = z.object({
   AI_MODEL: z.string().optional().default('gpt-5.6'),
   /** Gemini API key — used when OpenAI fails or is unset. */
   GEMINI_API_KEY: z.string().optional().default(''),
-  /** Gemini model id for fallback (e.g. gemini-2.5-flash). */
-  GEMINI_MODEL: z.string().optional().default('gemini-2.5-flash'),
+  /** Gemini model id for fallback (e.g. gemini-3.6-flash). */
+  GEMINI_MODEL: z.string().optional().default('gemini-3.6-flash'),
 
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])

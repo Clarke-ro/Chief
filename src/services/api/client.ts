@@ -13,11 +13,13 @@ export class ApiConfigError extends Error {
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly serverMessage?: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, serverMessage?: string) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.serverMessage = serverMessage;
   }
 }
 
@@ -86,8 +88,22 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}): Pro
 export async function apiJson<T>(path: string, options?: ApiFetchOptions): Promise<T> {
   const response = await apiFetch(path, options);
   if (!response.ok) {
-    // Do not echo response body — may contain server details
-    throw new ApiError(response.status, `Request failed (${response.status}).`);
+    let serverMessage: string | undefined;
+    try {
+      const body = (await response.json()) as { message?: string | string[] };
+      if (typeof body.message === 'string' && body.message.trim()) {
+        serverMessage = body.message.trim();
+      } else if (Array.isArray(body.message) && body.message[0]) {
+        serverMessage = String(body.message[0]);
+      }
+    } catch {
+      // ignore parse failures — fall back to status-only message
+    }
+    throw new ApiError(
+      response.status,
+      serverMessage ?? `Request failed (${response.status}).`,
+      serverMessage,
+    );
   }
 
   const text = await response.text();

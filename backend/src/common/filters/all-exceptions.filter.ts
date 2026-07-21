@@ -56,8 +56,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message = exception.message;
     }
 
-    // Never leak raw stack/provider/Prisma details to clients in production 500s.
-    if (this.isProduction && status >= 500) {
+    // Keep intentional 503 messages (LLM quota / model unavailable) for the client.
+    if (this.isProduction && status >= 500 && status !== HttpStatus.SERVICE_UNAVAILABLE) {
       message = 'Internal server error';
     }
 

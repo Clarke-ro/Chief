@@ -141,9 +141,10 @@ export function ChiefScreen() {
         } catch (error) {
           const detail =
             error instanceof ApiError
-              ? error.status === 503
-                ? 'Chief chat is not configured on the server yet.'
-                : `Request failed (${error.status}).`
+              ? error.serverMessage ??
+                (error.status === 503
+                  ? 'Chief could not reach a language model right now.'
+                  : `Request failed (${error.status}).`)
               : error instanceof ApiNetworkError
                 ? error.message
                 : 'Something went wrong.';
@@ -152,7 +153,7 @@ export function ChiefScreen() {
             {
               id: `c-${Date.now() + 1}`,
               role: 'chief',
-              content: `${detail} I couldn't use your live workspace context for this reply.`,
+              content: `${detail} I couldn't finish this reply with your live workspace context.`,
             },
             text,
           );
