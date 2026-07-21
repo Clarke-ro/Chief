@@ -36,6 +36,8 @@ export type BriefingSignal = {
   title: string;
   summary: string;
   timestamp: string;
+  /** Chief-of-Staff Brief section (Needs Attention, Security, …). */
+  section?: string;
 };
 
 export type HomeBrief = {

@@ -10,7 +10,7 @@ type BriefingSignalRowProps = {
   onPress?: () => void;
 };
 
-/** One update block along a platform's briefing thread rail. */
+/** One update block along a Brief section thread rail. */
 export function BriefingSignalRow({ item, onPress }: BriefingSignalRowProps) {
   const colors = useThemeColors();
 

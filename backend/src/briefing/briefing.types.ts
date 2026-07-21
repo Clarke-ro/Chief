@@ -27,6 +27,8 @@ export type BriefingSignalDto = {
   title: string;
   summary: string;
   timestamp: string;
+  /** Chief-of-Staff section for Brief grouping (not the source app). */
+  section?: string;
 };
 
 export type HomeBriefDto = {

@@ -2,7 +2,7 @@ import { ArrowLeft, MoreHorizontal, Star } from 'lucide-react-native';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { EmptyState, PlatformLogo, platformLabels } from '@/components/ui';
+import { EmptyState, PlatformLogo } from '@/components/ui';
 import type { FocusAction, FocusItem } from '@/features/brief/types';
 import { PRIORITY_STARS } from '@/features/brief/types';
 import { useThemeColors } from '@/hooks/useThemeColors';
@@ -94,7 +94,7 @@ export function FocusDetailScreen({
           <View style={styles.platformRow}>
             <PlatformLogo platform={item.platform} size={22} />
             <Text style={[styles.platform, { color: colors.textSecondary }]}>
-              {platformLabels[item.platform]}
+              {item.urgencyLabel}
             </Text>
           </View>
           <Text style={[styles.title, { color: colors.text }]}>{item.title}</Text>

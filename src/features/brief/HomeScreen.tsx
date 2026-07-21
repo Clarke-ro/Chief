@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { dispatchFocusAction } from '@/features/actions';
 import { EmptyState, SearchBar } from '@/components/ui';
-import { PlatformLogo, platformLabels, type PlatformId } from '@/components/ui/PlatformLogo';
+import { PlatformLogo, type PlatformId } from '@/components/ui/PlatformLogo';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { BriefingSignalRow } from '@/features/brief/components/BriefingSignalRow';
 import { FocusRow } from '@/features/brief/components/FocusRow';
@@ -38,14 +38,45 @@ function formatTodayLabel(date = new Date()): string {
   });
 }
 
-function groupByPlatform<T extends { platform: PlatformId }>(items: T[]) {
-  const groups: { platform: PlatformId; items: T[] }[] = [];
+function groupByBriefSection<T extends { section?: string; platform: PlatformId }>(items: T[]) {
+  const order = [
+    'Needs Attention',
+    'Security',
+    'Finance',
+    'Career',
+    'Meetings',
+    'Projects',
+    'Updates',
+  ];
+  const groups: { section: string; items: T[] }[] = [];
   for (const item of items) {
-    const group = groups.find((g) => g.platform === item.platform);
+    const section = item.section?.trim() || fallbackSection(item.platform);
+    const group = groups.find((g) => g.section === section);
     if (group) group.items.push(item);
-    else groups.push({ platform: item.platform, items: [item] });
+    else groups.push({ section, items: [item] });
   }
+  groups.sort((a, b) => {
+    const ai = order.indexOf(a.section);
+    const bi = order.indexOf(b.section);
+    return (ai === -1 ? order.length : ai) - (bi === -1 ? order.length : bi);
+  });
   return groups;
+}
+
+function fallbackSection(platform: PlatformId): string {
+  switch (platform) {
+    case 'calendar':
+      return 'Meetings';
+    case 'github':
+    case 'notion':
+    case 'asana':
+    case 'trello':
+      return 'Projects';
+    case 'slack':
+      return 'Needs Attention';
+    default:
+      return 'Updates';
+  }
 }
 
 /** Home — AI briefing: "What should I do today?" */
@@ -65,7 +96,7 @@ export function HomeScreen() {
   const [query, setQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const dateLabel = useMemo(() => formatTodayLabel(), []);
-  const briefingGroups = useMemo(() => groupByPlatform(brief.briefing), [brief.briefing]);
+  const briefingGroups = useMemo(() => groupByBriefSection(brief.briefing), [brief.briefing]);
 
   const kickedSync = useRef(false);
 
@@ -214,7 +245,7 @@ export function HomeScreen() {
               />
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Open analytics for your success score"
+                accessibilityLabel="Open analytics for your Focus Score"
                 onPress={openAnalytics}
                 style={({ pressed }) => [styles.scoreHit, pressed && { opacity: 0.85 }]}
               >
@@ -290,7 +321,7 @@ export function HomeScreen() {
                                   style={[styles.focusApp, { color: colors.textSecondary }]}
                                   numberOfLines={1}
                                 >
-                                  {platformLabels[item.platform]}
+                                  {item.urgencyLabel}
                                 </Text>
                                 <View style={styles.focusMetaTrailing}>
                                   <PriorityBadge priority={item.priority} size="sm" />
@@ -337,18 +368,17 @@ export function HomeScreen() {
                   title="Brief is quiet"
                   description={
                     env.liveHomeBrief
-                      ? 'Unread mail and today’s calendar events will appear here after sync.'
+                      ? 'After sync, Chief groups what needs attention — deadlines, security, career, and more.'
                       : 'Briefing signals will show up here.'
                   }
                 />
               ) : (
                 <View style={styles.briefingGroups}>
                   {briefingGroups.map((group) => (
-                    <View key={group.platform}>
+                    <View key={group.section}>
                       <View style={styles.groupHeader}>
-                        <PlatformLogo platform={group.platform} size={32} />
                         <Text style={[styles.groupTitle, { color: colors.text }]}>
-                          {platformLabels[group.platform]}
+                          {group.section}
                         </Text>
                       </View>
                       <View style={[styles.thread, { borderLeftColor: colors.border }]}>
@@ -532,7 +562,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   thread: {
-    marginLeft: spacing[32] + spacing[16],
+    marginLeft: spacing[32],
     marginRight: spacing[32],
     borderLeftWidth: 2,
     paddingLeft: spacing[20],
