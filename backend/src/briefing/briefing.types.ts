@@ -61,6 +61,8 @@ export type HomeBriefDto = {
   successInsight: string;
   focus: FocusItemDto[];
   briefing: BriefingSignalDto[];
+  /** ISO timestamp when this brief snapshot was composed. */
+  generatedAt?: string;
 };
 
 export function isHomeBriefDto(value: unknown): value is HomeBriefDto {

@@ -20,9 +20,29 @@ export const useSessionBootStore = create<SessionBootState>((set) => ({
   hasSession: false,
   me: null,
 
-  markSignedIn: (me) => set({ ready: true, hasSession: true, me }),
+  markSignedIn: (me) => {
+    set({ ready: true, hasSession: true, me });
+    void import('@/stores/workspaceStore').then(({ useWorkspaceStore }) => {
+      useWorkspaceStore.getState().applyUserIdentity({
+        name: me.user.name,
+        email: me.user.email,
+        image: me.user.image,
+      });
+    });
+  },
   markSignedOut: () => set({ ready: true, hasSession: false, me: null }),
-  markReady: ({ me }) => set({ ready: true, hasSession: Boolean(me), me }),
+  markReady: ({ me }) => {
+    set({ ready: true, hasSession: Boolean(me), me });
+    if (me) {
+      void import('@/stores/workspaceStore').then(({ useWorkspaceStore }) => {
+        useWorkspaceStore.getState().applyUserIdentity({
+          name: me.user.name,
+          email: me.user.email,
+          image: me.user.image,
+        });
+      });
+    }
+  },
 }));
 
 let bootPromise: Promise<void> | null = null;

@@ -2,7 +2,7 @@
 import { useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, PlugZap } from 'lucide-react-native';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -22,8 +22,6 @@ import { ProfileIdentity } from '@/features/profile/components/ProfileIdentity';
 import { ProfileSectionLabel } from '@/features/profile/components/ProfileSectionLabel';
 import { SettingRow } from '@/features/profile/components/SettingRow';
 import { SettingsGroup } from '@/features/profile/components/SettingsGroup';
-import { SubscriptionBanner } from '@/features/profile/components/SubscriptionBanner';
-import { SyncHealthCard } from '@/features/profile/components/SyncHealthCard';
 import { mapLiveConnectedApps } from '@/features/profile/mapLiveConnectedApps';
 import type { ConnectedApp } from '@/features/profile/types';
 import { useThemeColors } from '@/hooks/useThemeColors';
@@ -37,7 +35,12 @@ import { clearUserSession, queryKeys, workspaceNav } from '@/services';
 import { briefRepository } from '@/services/repositories/briefRepository';
 import { integrationsRepository } from '@/services/repositories/integrationsRepository';
 import { syncRepository } from '@/services/repositories/syncRepository';
-import { usePreferencesStore, useWorkspaceStore, type ThemePreference } from '@/stores';
+import {
+  usePreferencesStore,
+  useSessionBootStore,
+  useWorkspaceStore,
+  type ThemePreference,
+} from '@/stores';
 import { spacing, typography } from '@/theme';
 
 function askFromProfile(prompt: string) {
@@ -50,10 +53,7 @@ const THEME_OPTIONS: { id: ThemePreference; title: string; subtitle: string }[] 
   { id: 'system', title: 'System', subtitle: 'Match your device setting' },
 ];
 
-/** Unwired settings stay silent — no placeholder alerts. */
-const noop = () => {};
-
-/** Profile — control center with clear section bands, not a dense settings dump. */
+/** Profile — account, connections, theme, and notifications. */
 export function ProfileScreen() {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
@@ -66,9 +66,20 @@ export function ProfileScreen() {
   const [loggingOut, setLoggingOut] = useState(false);
 
   const profile = useWorkspaceStore((s) => s.profile);
+  const applyUserIdentity = useWorkspaceStore((s) => s.applyUserIdentity);
   const notifications = profile.notifications;
   const setNotificationEnabled = useWorkspaceStore((s) => s.setNotificationEnabled);
   const refreshBrief = useWorkspaceStore((s) => s.refreshBrief);
+  const me = useSessionBootStore((s) => s.me);
+
+  useEffect(() => {
+    if (!me?.user) return;
+    applyUserIdentity({
+      name: me.user.name,
+      email: me.user.email,
+      image: me.user.image,
+    });
+  }, [applyUserIdentity, me]);
 
   const workspaceQuery = useQuery({
     queryKey: [...queryKeys.root, 'activeWorkspace'],
@@ -301,20 +312,6 @@ export function ProfileScreen() {
   const appsError = integrationsQuery.isError;
   const anyConnected = connectedApps.some((a) => a.connected);
 
-  const handleRetrySync = useCallback(() => {
-    if (!workspaceId) return;
-    void syncRepository
-      .runAllConnections(workspaceId)
-      .then(() => {
-        void queryClient.invalidateQueries({
-          queryKey: [...queryKeys.root, 'syncHealth'],
-        });
-      })
-      .catch(() => {
-        notifyAlert('Sync failed', 'Could not start sync. Try again in a moment.');
-      });
-  }, [queryClient, workspaceId]);
-
   return (
     <View
       style={[
@@ -337,7 +334,7 @@ export function ProfileScreen() {
           />
 
           <View style={styles.identity}>
-            <ProfileIdentity user={profile.user} onEdit={noop} />
+            <ProfileIdentity user={profile.user} />
           </View>
 
           <View style={styles.stack}>
@@ -372,16 +369,6 @@ export function ProfileScreen() {
                       No apps connected yet. Tap Add to connect Gmail, Slack, GitHub, or Notion.
                     </Text>
                   ) : null}
-                  <View style={styles.healthWrap}>
-                    <SyncHealthCard
-                      workspaceId={workspaceId}
-                      apps={connectedApps}
-                      onReconnect={(app) => {
-                        void runReconnect(app);
-                      }}
-                      onRetrySync={handleRetrySync}
-                    />
-                  </View>
                 </>
               )}
               {busyAppId ? (
@@ -401,7 +388,6 @@ export function ProfileScreen() {
               workspaceId={workspaceId}
               onConnected={invalidateIntegrations}
             />
-
 
             <SettingsGroup
               title="Chief"
@@ -434,11 +420,6 @@ export function ProfileScreen() {
                     'Help me protect focus hours on my Today schedule.',
                   )
                 }
-              />
-              <SettingRow
-                title="Language & Region"
-                value="English"
-                onPress={noop}
                 isLast
               />
             </SettingsGroup>
@@ -483,51 +464,7 @@ export function ProfileScreen() {
               })}
             </SettingsGroup>
 
-            <SettingsGroup title="Display">
-              <SettingRow
-                title="Accent Color"
-                value={profile.appearance.accent}
-                onPress={noop}
-              />
-              <SettingRow
-                title="App Icon"
-                value={profile.appearance.appIcon}
-                onPress={noop}
-              />
-              <SettingRow
-                title="Text Size"
-                value={profile.appearance.textSize}
-                onPress={noop}
-                isLast
-              />
-            </SettingsGroup>
-
-            <SettingsGroup title="Privacy & Security">
-              <SettingRow title="Privacy" onPress={noop} />
-              <SettingRow title="Security" onPress={noop} />
-              <SettingRow title="Biometric Lock" onPress={noop} />
-              <SettingRow title="Connected Devices" onPress={noop} />
-              <SettingRow
-                title="Manage Sessions"
-                onPress={() => workspaceNav.chief()}
-                isLast
-              />
-            </SettingsGroup>
-
-            <View style={styles.plainBlock}>
-              <ProfileSectionLabel
-                title="Subscription"
-                description="Your plan and how Chief stays available."
-              />
-              <SubscriptionBanner
-                subscription={profile.subscription}
-                onManage={noop}
-                onUpgrade={noop}
-              />
-            </View>
-
             <SettingsGroup title="Support">
-              <SettingRow title="Help Center" onPress={noop} />
               <SettingRow
                 title="Send Feedback"
                 onPress={() => askFromProfile('I have feedback about Chief: ')}
@@ -535,15 +472,13 @@ export function ProfileScreen() {
               <SettingRow
                 title="Feature Requests"
                 onPress={() => askFromProfile('Feature request: ')}
+                isLast
               />
-              <SettingRow title="Privacy Policy" onPress={noop} />
-              <SettingRow title="Terms of Service" onPress={noop} />
-              <SettingRow title="About Chief" onPress={noop} isLast />
             </SettingsGroup>
 
             <SettingsGroup>
               <SettingRow
-                title="Log Out"
+                title={loggingOut ? 'Signing out…' : 'Log Out'}
                 destructive
                 showChevron={false}
                 onPress={() => {
@@ -594,9 +529,6 @@ const styles = StyleSheet.create({
     marginTop: spacing[12],
     lineHeight: 18,
     paddingHorizontal: spacing[8],
-  },
-  healthWrap: {
-    marginTop: spacing[12],
   },
   busyRow: {
     flexDirection: 'row',

@@ -4,7 +4,6 @@ export const ONBOARDING_STEPS = [
   'connect',
   'scan',
   'brief',
-  'ready',
 ] as const;
 
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];

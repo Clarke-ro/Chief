@@ -9,6 +9,7 @@ import {
 } from '@/features/actions';
 import { ChatMarkdownText } from '@/features/chief/components/ChatMarkdownText';
 import { ChiefLogo } from '@/features/chief/components/ChiefLogo';
+import { ChiefThinking } from '@/features/chief/components/ChiefThinking';
 import type { ConversationTurn } from '@/features/chief/types';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { useCanvasStore } from '@/stores';
@@ -17,6 +18,8 @@ import { fontFamily, radius, spacing, typography } from '@/theme';
 type ConversationThreadProps = {
   turns: ConversationTurn[];
   onAction?: (task: ActionableTask) => void;
+  /** Show pulsing Chief logo while a reply is loading. */
+  thinking?: boolean;
 };
 
 type TurnProps = {
@@ -88,8 +91,12 @@ const ChiefTurn = memo(function ChiefTurn({ turn, onAction }: TurnProps) {
  * Chat flow with optional canvas artifact cards.
  * Canvas sits full-width under the reply so it isn’t squeezed by avatar indent.
  */
-export function ConversationThread({ turns, onAction }: ConversationThreadProps) {
-  if (turns.length === 0) return null;
+export function ConversationThread({
+  turns,
+  onAction,
+  thinking = false,
+}: ConversationThreadProps) {
+  if (turns.length === 0 && !thinking) return null;
 
   return (
     <View style={styles.wrap} accessibilityRole="text">
@@ -100,6 +107,7 @@ export function ConversationThread({ turns, onAction }: ConversationThreadProps)
           <ChiefTurn key={turn.id} turn={turn} onAction={onAction} />
         ),
       )}
+      {thinking ? <ChiefThinking /> : null}
     </View>
   );
 }

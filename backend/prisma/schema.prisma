@@ -29,6 +29,7 @@ model User {
   auditLogs           AuditLog[]
   preference          UserPreference?
   notifications       Notification[]
+  pushDevices         PushDevice[]
   aiConversations     AiConversation[]
   briefs              Brief[]
   tasks               Task[]
@@ -412,6 +413,23 @@ model Notification {
   @@index([workspaceId, createdAt])
   @@index([userId, readAt])
   @@map("notification")
+}
+
+/// Expo / device push token for deadline + security alerts.
+model PushDevice {
+  id         String   @id @default(cuid())
+  userId     String
+  token      String
+  platform   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  lastSeenAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, token])
+  @@index([userId])
+  @@map("push_device")
 }
 
 model AiConversation {

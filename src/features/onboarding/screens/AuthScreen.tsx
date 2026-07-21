@@ -13,17 +13,18 @@ import {
   View,
 } from 'react-native';
 
+import { ChiefLogo } from '@/features/chief/components/ChiefLogo';
 import { OnboardingCopy } from '@/features/onboarding/components/OnboardingCopy';
 import { OnboardingShell } from '@/features/onboarding/components/OnboardingShell';
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { authService, AuthServiceError } from '@/services/auth/authService';
-import { usePreferencesStore, useSessionBootStore } from '@/stores';
+import { usePreferencesStore, useSessionBootStore, useWorkspaceStore } from '@/stores';
 import { radius, spacing, typography } from '@/theme';
 
 type AuthMode = 'signIn' | 'signUp';
 
-/** Step 2 — email/password sign-in or sign-up against the live backend. */
+/** Email/password sign-in or sign-up against the live backend. */
 export function AuthScreen() {
   const colors = useThemeColors();
   const scheme = useResolvedColorScheme();
@@ -35,6 +36,12 @@ export function AuthScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const continueAfterAuth = (me: Awaited<ReturnType<typeof authService.signIn>>) => {
+    useWorkspaceStore.getState().applyUserIdentity({
+      name: me.user.name,
+      email: me.user.email,
+      image: me.user.image,
+    });
+
     if (me.user.onboardingCompleted) {
       usePreferencesStore.getState().completeOnboarding();
       router.replace('/home');
@@ -91,10 +98,11 @@ export function AuthScreen() {
 
   const toggleMode = () => {
     setMode((current) => (current === 'signIn' ? 'signUp' : 'signIn'));
+    setErrorMessage(null);
   };
 
   return (
-    <OnboardingShell stepIndex={1} centered={false}>
+    <OnboardingShell stepIndex={1} centered={false} showSkip={false}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -105,7 +113,17 @@ export function AuthScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <OnboardingCopy title="Sign in to hire Chief." />
+          <View style={styles.header}>
+            <ChiefLogo size={36} />
+            <OnboardingCopy
+              title={mode === 'signIn' ? 'Welcome back.' : 'Create your account.'}
+              body={
+                mode === 'signIn'
+                  ? 'Sign in to pick up where Chief left off.'
+                  : 'Hire Chief to prioritize your day from the apps you already use.'
+              }
+            />
+          </View>
 
           <View style={styles.form}>
             <TextInput
@@ -207,8 +225,13 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    gap: spacing[24],
+    justifyContent: 'center',
+    gap: spacing[32],
     paddingBottom: spacing[16],
+  },
+  header: {
+    width: '100%',
+    gap: spacing[20],
   },
   form: {
     width: '100%',

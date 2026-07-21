@@ -1,38 +1,16 @@
-import { MessageSquare } from 'lucide-react-native';
-import { useCallback } from 'react';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { BarChart3 } from 'lucide-react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppHeader } from '@/components/ui';
-import { AchievementsSection } from '@/features/analytics/components/AchievementsSection';
-import { AiImpactSection } from '@/features/analytics/components/AiImpactSection';
-import { PerformanceSection } from '@/features/analytics/components/PerformanceSection';
-import { ProductivitySection } from '@/features/analytics/components/ProductivitySection';
-import { WeeklyTrendsSection } from '@/features/analytics/components/WeeklyTrendsSection';
-import { WorkBreakdownSection } from '@/features/analytics/components/WorkBreakdownSection';
+import { AppHeader, EmptyState } from '@/components/ui';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { dispatchAction } from '@/features/actions';
-import { workspaceNav } from '@/services';
-import { useWorkspaceStore } from '@/stores';
 import { spacing } from '@/theme';
 
-/** Analytics tab — retrospective value of how you work with Chief. */
+/** Analytics tab — coming soon (no mock charts). */
 export function AnalyticsScreen() {
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
-  const data = useWorkspaceStore((s) => s.analytics);
   const bottomPad = insets.bottom + (Platform.OS === 'ios' ? 88 : 24);
-
-  const askChief = useCallback(() => {
-    void dispatchAction({
-      kind: 'ask',
-      prompt: workspaceNav.analyticsPrompt(
-        Math.round(data.productivity.score * 100),
-        data.productivity.insight,
-      ),
-      source: 'analytics',
-    });
-  }, [data.productivity.insight, data.productivity.score]);
 
   return (
     <View
@@ -41,39 +19,21 @@ export function AnalyticsScreen() {
         {
           paddingTop: insets.top,
           backgroundColor: colors.bg,
+          paddingBottom: bottomPad,
         },
       ]}
     >
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={{ paddingBottom: bottomPad }}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.viewport}>
-          <AppHeader
-            title="Analytics"
-            subtitle="How you work, improve, and how much Chief creates."
-            actions={[
-              {
-                icon: MessageSquare,
-                label: 'Ask Chief about analytics',
-                onPress: askChief,
-              },
-            ]}
-          />
-
-          <View style={styles.sections}>
-            <ProductivitySection data={data.productivity} />
-            <AiImpactSection metrics={data.aiImpact} />
-            <WorkBreakdownSection categories={data.workBreakdown} />
-            <PerformanceSection metrics={data.performance} />
-            <WeeklyTrendsSection series={data.weeklyTrends} />
-            <AchievementsSection achievements={data.achievements} />
-          </View>
-
-          <View style={{ height: spacing[24] }} />
-        </View>
-      </ScrollView>
+      <View style={styles.viewport}>
+        <AppHeader
+          title="Analytics"
+          subtitle="How you work with Chief — insights coming soon."
+        />
+        <EmptyState
+          icon={BarChart3}
+          title="Coming soon"
+          description="Productivity trends, AI impact, and weekly retrospectives will live here. Keep using Home and Today — Chief is already learning from your schedule."
+        />
+      </View>
     </View>
   );
 }
@@ -82,16 +42,11 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
   },
-  scroll: {
-    flex: 1,
-  },
   viewport: {
+    flex: 1,
     width: '100%',
     maxWidth: 720,
     alignSelf: 'center',
-  },
-  sections: {
-    gap: spacing[24],
-    paddingTop: spacing[8],
+    paddingBottom: spacing[24],
   },
 });

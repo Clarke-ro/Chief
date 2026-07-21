@@ -6,7 +6,7 @@ import { WorkerAppModule } from './worker/worker-app.module';
 
 /**
  * BullMQ worker process — consumes queues, registers schedules.
- * Sync processors are no-ops until the sync phase ships.
+ * Sync, briefing, and notification processors are live.
  *
  * Exposes a tiny /health/live so Railway can use the same healthcheck
  * path as the API without binding Nest HTTP.

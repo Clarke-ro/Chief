@@ -4,6 +4,7 @@ import {
   SyncResource,
   SyncRunStatus,
 } from '@prisma/client';
+import { QueueService } from '../../common/bullmq/queue.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AccessTokenService } from '../../integrations/tokens/access-token.service';
 import { SyncFetcherRegistry } from '../fetch/sync-fetcher.registry';
@@ -23,6 +24,7 @@ export class SyncPipelineService {
     private readonly policies: SyncPolicyService,
     private readonly fetchers: SyncFetcherRegistry,
     private readonly persist: SyncPersistService,
+    private readonly queues: QueueService,
   ) {}
 
   async runResourceJob(input: {
@@ -130,6 +132,20 @@ export class SyncPipelineService {
         },
       });
 
+      // Force next Home brief fetch to recompose with fresh sync data.
+      await this.staleTodayBrief(account.workspaceId);
+      try {
+        await this.queues.enqueueBriefingAfterSync(account.workspaceId);
+      } catch (error) {
+        this.logger.warn(
+          {
+            workspaceId: account.workspaceId,
+            err: error instanceof Error ? error.message : String(error),
+          },
+          'Failed to enqueue briefing after sync',
+        );
+      }
+
       return {
         itemCount: batch.items.length,
         stub: batch.stub ?? false,
@@ -161,6 +177,23 @@ export class SyncPipelineService {
     }
   }
 
+  private async staleTodayBrief(workspaceId: string) {
+    try {
+      await this.prisma.brief.updateMany({
+        where: { workspaceId, briefDate: utcDateOnly() },
+        data: { generatedAt: new Date(0) },
+      });
+    } catch (error) {
+      this.logger.warn(
+        {
+          workspaceId,
+          err: error instanceof Error ? error.message : String(error),
+        },
+        'Could not stale brief after sync',
+      );
+    }
+  }
+
   private async markNeedsReauth(connectedAccountId: string, message: string) {
     await this.prisma.connectedAccount.update({
       where: { id: connectedAccountId },
@@ -182,6 +215,12 @@ export class SyncPipelineService {
       },
     });
   }
+}
+
+function utcDateOnly(date = new Date()): Date {
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
 }
 
 export function parseSyncResource(value?: string): SyncResource | null {

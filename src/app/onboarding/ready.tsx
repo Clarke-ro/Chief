@@ -1,5 +1,15 @@
-import { EnterHomeScreen } from '@/features/onboarding/screens/EnterHomeScreen';
+import { Redirect } from 'expo-router';
+import { useEffect } from 'react';
 
-export default function OnboardingReadyRoute() {
-  return <EnterHomeScreen />;
+import { usePreferencesStore } from '@/stores';
+
+/** Legacy route — enter Home from the first brief instead. */
+export default function ReadyRedirect() {
+  const completeOnboarding = usePreferencesStore((s) => s.completeOnboarding);
+
+  useEffect(() => {
+    completeOnboarding();
+  }, [completeOnboarding]);
+
+  return <Redirect href="/home" />;
 }

@@ -79,6 +79,7 @@ export class BriefingService {
       return {
         ...existing.payload,
         userName: firstName(user.name) || existing.payload.userName,
+        generatedAt: existing.generatedAt.toISOString(),
       };
     }
 
@@ -108,7 +109,99 @@ export class BriefingService {
       },
     });
 
-    return composed;
+    return { ...composed, generatedAt: new Date().toISOString() };
+  }
+
+  /**
+   * Worker entry: compose + persist a brief for a workspace (no HTTP session).
+   * Uses the given user when provided; otherwise the workspace owner/first member.
+   */
+  async generateForWorkspace(
+    workspaceId: string,
+    userId?: string,
+  ): Promise<HomeBriefDto | null> {
+    const member = await this.resolveMemberUser(workspaceId, userId);
+    if (!member) {
+      this.logger.warn({ workspaceId }, 'No member for briefing.generate — skipping');
+      return null;
+    }
+
+    const authUser: AuthUser = {
+      id: member.id,
+      email: member.email,
+      name: member.name,
+      image: member.image,
+    };
+
+    const briefDate = utcDateOnly();
+    const composed = await this.composeBrief(authUser, workspaceId);
+    const generatedAt = new Date();
+    await this.prisma.brief.upsert({
+      where: {
+        workspaceId_briefDate: { workspaceId, briefDate },
+      },
+      create: {
+        workspaceId,
+        userId: authUser.id,
+        briefDate,
+        userName: composed.userName,
+        successScore: composed.successScore,
+        successLabel: composed.successLabel,
+        successInsight: composed.successInsight,
+        payload: composed as unknown as Prisma.InputJsonValue,
+        generatedAt,
+      },
+      update: {
+        userId: authUser.id,
+        userName: composed.userName,
+        successScore: composed.successScore,
+        successLabel: composed.successLabel,
+        successInsight: composed.successInsight,
+        payload: composed as unknown as Prisma.InputJsonValue,
+        generatedAt,
+      },
+    });
+
+    return { ...composed, generatedAt: generatedAt.toISOString() };
+  }
+
+  /** Weekday morning fan-out: one generate job per workspace with active members. */
+  async enqueueMorningFanout(
+    enqueue: (workspaceId: string, userId: string) => Promise<void>,
+  ): Promise<{ enqueued: number }> {
+    const memberships = await this.prisma.membership.findMany({
+      select: { workspaceId: true, userId: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const seen = new Set<string>();
+    let enqueued = 0;
+    for (const row of memberships) {
+      if (seen.has(row.workspaceId)) continue;
+      seen.add(row.workspaceId);
+      await enqueue(row.workspaceId, row.userId);
+      enqueued += 1;
+    }
+    return { enqueued };
+  }
+
+  private async resolveMemberUser(workspaceId: string, userId?: string) {
+    if (userId) {
+      const membership = await this.prisma.membership.findUnique({
+        where: {
+          workspaceId_userId: { workspaceId, userId },
+        },
+        include: { user: true },
+      });
+      return membership?.user ?? null;
+    }
+
+    const membership = await this.prisma.membership.findFirst({
+      where: { workspaceId },
+      orderBy: { createdAt: 'asc' },
+      include: { user: true },
+    });
+    return membership?.user ?? null;
   }
 
   /**

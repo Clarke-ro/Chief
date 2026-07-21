@@ -53,6 +53,15 @@ class HistoricalBodyDto {
 export class SyncController {
   constructor(private readonly sync: SyncService) {}
 
+  @Get('freshness')
+  @ApiOperation({ summary: 'Workspace-level last-synced freshness summary' })
+  freshness(
+    @CurrentUser() user: AuthUser,
+    @Query() query: WorkspaceQueryDto,
+  ) {
+    return this.sync.getWorkspaceFreshness(user, query.workspaceId);
+  }
+
   @Get('accounts/:connectedAccountId')
   @ApiOperation({ summary: 'Sync state for a connected account' })
   status(

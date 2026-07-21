@@ -1,20 +1,19 @@
 import { useRouter } from 'expo-router';
 import { ArrowRight } from 'lucide-react-native';
-import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import { ChiefLogo } from '@/features/chief/components/ChiefLogo';
 import { OnboardingCopy } from '@/features/onboarding/components/OnboardingCopy';
 import { OnboardingShell } from '@/features/onboarding/components/OnboardingShell';
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { radius, spacing, typography } from '@/theme';
 
-/** Step 1 — brand-first welcome, then hire Chief. */
+/** Brand-first welcome — logo + one CTA into auth. */
 export function WelcomeScreen() {
   const colors = useThemeColors();
   const scheme = useResolvedColorScheme();
   const router = useRouter();
-  const { width } = useWindowDimensions();
-  const brandSize = width < 360 ? 42 : 48;
   const goAuth = () => router.push('/onboarding/auth');
 
   const isLight = scheme === 'light';
@@ -23,18 +22,18 @@ export function WelcomeScreen() {
   const iconFg = isLight ? '#FFFFFF' : colors.bg;
 
   return (
-    <OnboardingShell stepIndex={0} showBack={false} centered={false}>
+    <OnboardingShell stepIndex={0} showBack={false} showSkip={false} centered={false}>
       <View style={styles.screen}>
         <View style={styles.hero}>
-          <Text
-            style={[
-              styles.brand,
-              { color: colors.text, fontSize: brandSize, lineHeight: brandSize + 4 },
-            ]}
-            accessibilityRole="header"
-          >
-            Chief
-          </Text>
+          <View style={styles.brandRow}>
+            <ChiefLogo size={44} />
+            <Text
+              style={[styles.brand, { color: colors.text }]}
+              accessibilityRole="header"
+            >
+              Chief
+            </Text>
+          </View>
           <OnboardingCopy
             title="Your AI that understands your work."
             body="Analyze. Prioritize. Schedule. Execute."
@@ -63,13 +62,13 @@ export function WelcomeScreen() {
 
           <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel="I already have a Chief"
+            accessibilityLabel="I already have an account"
             activeOpacity={0.55}
             onPress={goAuth}
             style={styles.secondary}
           >
-            <Text style={[styles.secondaryLabel, { color: titleColor }]}>
-              I already have a Chief
+            <Text style={[styles.secondaryLabel, { color: colors.textSecondary }]}>
+              I already have an account
             </Text>
           </TouchableOpacity>
         </View>
@@ -90,14 +89,21 @@ const styles = StyleSheet.create({
     gap: spacing[32],
     width: '100%',
   },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[12],
+  },
   brand: {
     ...typography.display,
+    fontSize: 40,
+    lineHeight: 44,
     letterSpacing: -1.2,
     fontWeight: '600',
   },
   actions: {
     width: '100%',
-    gap: spacing[16],
+    gap: spacing[12],
     paddingTop: spacing[24],
     flexShrink: 0,
   },
@@ -135,7 +141,7 @@ const styles = StyleSheet.create({
   secondaryLabel: {
     fontSize: 15,
     lineHeight: 20,
-    fontWeight: '600',
+    fontWeight: '500',
     textAlign: 'center',
   },
 });

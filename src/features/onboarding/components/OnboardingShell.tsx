@@ -12,9 +12,8 @@ import { radius, spacing, typography } from '@/theme';
 type OnboardingShellProps = {
   children: ReactNode;
   footer?: ReactNode;
-  /** 0-based step index for progress */
+  /** 0-based step index — used for back affordance only (no step progress bar). */
   stepIndex?: number;
-  stepCount?: number;
   /** Vertically center body content (welcome / auth). Off for scrollable steps. */
   centered?: boolean;
   /** Show Skip → Home. Defaults on for setup steps. */
@@ -28,7 +27,6 @@ export function OnboardingShell({
   children,
   footer,
   stepIndex,
-  stepCount = 6,
   centered = true,
   showSkip = true,
   showBack,
@@ -39,8 +37,6 @@ export function OnboardingShell({
   const router = useRouter();
 
   const canBack = showBack ?? (stepIndex != null && stepIndex > 0);
-  const progress =
-    stepIndex != null && stepCount > 0 ? (stepIndex + 1) / stepCount : 0;
 
   return (
     <View
@@ -101,29 +97,6 @@ export function OnboardingShell({
         )}
       </View>
 
-      {stepIndex != null ? (
-        <View
-          style={[styles.track, { backgroundColor: colors.borderSubtle }]}
-          accessibilityRole="progressbar"
-          accessibilityValue={{
-            min: 0,
-            max: stepCount,
-            now: stepIndex + 1,
-          }}
-        >
-          <View
-            style={[
-              styles.trackFill,
-              {
-                flex: progress,
-                backgroundColor: colors.accent,
-              },
-            ]}
-          />
-          <View style={{ flex: Math.max(0.0001, 1 - progress) }} />
-        </View>
-      ) : null}
-
       <View style={[styles.body, centered && styles.bodyCentered]}>{children}</View>
 
       {footer ? (
@@ -165,18 +138,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     paddingVertical: spacing[8],
     paddingHorizontal: spacing[4],
-  },
-  track: {
-    height: 4,
-    borderRadius: 2,
-    overflow: 'hidden',
-    marginBottom: spacing[24],
-    flexDirection: 'row',
-    width: '100%',
-  },
-  trackFill: {
-    height: 4,
-    borderRadius: 2,
   },
   body: {
     flex: 1,

@@ -1,7 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
 import { Bell, ChevronRight, Inbox, Search as SearchIcon } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   Platform,
   Pressable,
   RefreshControl,
@@ -20,12 +20,15 @@ import { BriefingSignalRow } from '@/features/brief/components/BriefingSignalRow
 import { FocusRow } from '@/features/brief/components/FocusRow';
 import { Greeting } from '@/features/brief/components/Greeting';
 import { HomeSection } from '@/features/brief/components/HomeSection';
+import { NotificationsInboxSheet } from '@/features/brief/components/NotificationsInboxSheet';
 import { SuccessScore } from '@/features/brief/components/SuccessScore';
 import type { FocusAction } from '@/features/brief/types';
 import { env } from '@/config/env';
 import { useMountedRef } from '@/hooks/useMountedRef';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { ensureActiveWorkspaceId, workspaceNav } from '@/services';
+import { ensureActiveWorkspaceId, queryKeys, workspaceNav } from '@/services';
+import { registerForPushNotifications } from '@/services/notifications/registerPush';
+import { notificationsRepository } from '@/services/repositories/notificationsRepository';
 import { syncRepository } from '@/services/repositories/syncRepository';
 import { useSessionBootStore, useWorkspaceStore } from '@/stores';
 import { fontFamily, radius, spacing, typography } from '@/theme';
@@ -36,6 +39,18 @@ function formatTodayLabel(date = new Date()): string {
     month: 'long',
     day: 'numeric',
   });
+}
+
+function formatSyncAge(iso: string | null): string {
+  if (!iso) return 'Not synced yet';
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return 'Synced just now';
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 1) return 'Synced just now';
+  if (mins < 60) return `Synced ${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `Synced ${hours}h ago`;
+  return `Synced ${Math.floor(hours / 24)}d ago`;
 }
 
 function groupByBriefSection<T extends { section?: string; platform: PlatformId }>(items: T[]) {
@@ -89,13 +104,20 @@ export function HomeScreen() {
   const completeFocus = useWorkspaceStore((s) => s.completeFocus);
   const hasSession = useSessionBootStore((s) => s.hasSession);
   const sessionReady = useSessionBootStore((s) => s.ready);
-  const notificationCount = useWorkspaceStore(
-    (s) => s.profile.notifications.filter((n) => n.enabled).length,
-  );
+  const me = useSessionBootStore((s) => s.me);
+  const applyUserIdentity = useWorkspaceStore((s) => s.applyUserIdentity);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [workspaceId, setWorkspaceId] = useState<string | undefined>();
+  const [unreadCount, setUnreadCount] = useState(0);
   const dateLabel = useMemo(() => formatTodayLabel(), []);
+  const greetingName = useMemo(() => {
+    const fromSession = me?.user.name?.trim().split(/\s+/)[0];
+    if (fromSession) return fromSession;
+    return brief.userName?.trim() || 'there';
+  }, [brief.userName, me?.user.name]);
   const briefingGroups = useMemo(() => {
     const focusIds = new Set(brief.focus.map((item) => item.id));
     const unique = brief.briefing.filter(
@@ -108,23 +130,82 @@ export function HomeScreen() {
   }, [brief.briefing, brief.focus]);
 
   const kickedSync = useRef(false);
+  const kickedPush = useRef(false);
+
+  useEffect(() => {
+    if (!me?.user) return;
+    applyUserIdentity({
+      name: me.user.name,
+      email: me.user.email,
+      image: me.user.image,
+    });
+  }, [applyUserIdentity, me]);
+
+  useEffect(() => {
+    if (!sessionReady || !hasSession) return;
+    void ensureActiveWorkspaceId()
+      .then((id) => {
+        if (mounted.current) setWorkspaceId(id);
+      })
+      .catch(() => undefined);
+  }, [hasSession, mounted, sessionReady]);
+
+  const freshnessQuery = useQuery({
+    queryKey: [...queryKeys.root, 'syncFreshness', workspaceId],
+    enabled: Boolean(workspaceId) && env.liveHomeBrief && hasSession,
+    refetchInterval: 60_000,
+    queryFn: () => syncRepository.getFreshness(workspaceId!),
+  });
+
+  const unreadQuery = useQuery({
+    queryKey: [...queryKeys.root, 'notificationsUnread', workspaceId],
+    enabled: Boolean(workspaceId) && env.liveHomeBrief && hasSession,
+    refetchInterval: 60_000,
+    queryFn: async () => {
+      const result = await notificationsRepository.list({
+        workspaceId,
+        unreadOnly: true,
+      });
+      return result.unreadCount;
+    },
+  });
+
+  useEffect(() => {
+    if (typeof unreadQuery.data === 'number') {
+      setUnreadCount(unreadQuery.data);
+    }
+  }, [unreadQuery.data]);
+
+  const freshnessLabel = useMemo(() => {
+    const data = freshnessQuery.data;
+    if (!data) return null;
+    if (data.syncing) return 'Syncing…';
+    if (data.failed) return 'Sync issue — pull to retry';
+    return formatSyncAge(data.lastSyncedAt);
+  }, [freshnessQuery.data]);
 
   // Cache-first: paint cached brief immediately; sync + merge in the background.
   useEffect(() => {
     if (!env.liveHomeBrief || !sessionReady || !hasSession || kickedSync.current) return;
     kickedSync.current = true;
     void (async () => {
-      // Show cache first (already in store from hydrate / prior session).
       await refreshBrief();
       try {
-        const workspaceId = await ensureActiveWorkspaceId();
-        await syncRepository.runFirstConnection(workspaceId);
+        const id = await ensureActiveWorkspaceId();
+        if (mounted.current) setWorkspaceId(id);
+        await syncRepository.runFirstConnection(id);
         await refreshBrief();
       } catch {
         // Keep cached workspace visible.
       }
     })();
-  }, [hasSession, refreshBrief, sessionReady]);
+  }, [hasSession, mounted, refreshBrief, sessionReady]);
+
+  useEffect(() => {
+    if (!env.liveHomeBrief || !sessionReady || !hasSession || kickedPush.current) return;
+    kickedPush.current = true;
+    void registerForPushNotifications();
+  }, [hasSession, sessionReady]);
 
   const openFocus = useCallback((id: string) => {
     workspaceNav.focus(id);
@@ -147,32 +228,27 @@ export function HomeScreen() {
   }, []);
 
   const openNotifications = useCallback(() => {
-    Alert.alert(
-      'Notifications',
-      `${notificationCount} alert types enabled — manage preferences in Profile.`,
-      [
-        { text: 'Open Profile', onPress: () => workspaceNav.profile() },
-        { text: 'OK', style: 'cancel' },
-      ],
-    );
-  }, [notificationCount]);
+    setInboxOpen(true);
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       if (env.liveHomeBrief && hasSession) {
         try {
-          const workspaceId = await ensureActiveWorkspaceId();
-          await syncRepository.runFirstConnection(workspaceId);
+          const id = await ensureActiveWorkspaceId();
+          if (mounted.current) setWorkspaceId(id);
+          await syncRepository.runFirstConnection(id);
         } catch {
           // Brief refresh still runs with whatever is already persisted.
         }
       }
       await refreshBrief();
+      await Promise.all([freshnessQuery.refetch(), unreadQuery.refetch()]);
     } finally {
       if (mounted.current) setRefreshing(false);
     }
-  }, [hasSession, mounted, refreshBrief]);
+  }, [freshnessQuery, hasSession, mounted, refreshBrief, unreadQuery]);
 
   const toggleSearch = () => {
     setShowSearch((prev) => {
@@ -182,6 +258,7 @@ export function HomeScreen() {
   };
 
   const bottomPad = insets.bottom + (Platform.OS === 'ios' ? 88 : 24);
+  const badgeCount = unreadCount;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: colors.bg }]}>
@@ -204,8 +281,9 @@ export function HomeScreen() {
           <View style={[styles.hero, { borderBottomColor: colors.borderSubtle }]}>
             <View style={styles.heroTop}>
               <Greeting
-                userName={brief.userName}
+                userName={greetingName}
                 dateLabel={dateLabel}
+                freshnessLabel={env.liveHomeBrief ? freshnessLabel : null}
                 actions={
                   <>
                     <Pressable
@@ -229,7 +307,11 @@ export function HomeScreen() {
                     </Pressable>
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel={`Notifications, ${notificationCount} alert types enabled`}
+                      accessibilityLabel={
+                        badgeCount > 0
+                          ? `Notifications, ${badgeCount} unread`
+                          : 'Notifications'
+                      }
                       hitSlop={8}
                       onPress={openNotifications}
                       style={({ pressed }) => [
@@ -241,10 +323,10 @@ export function HomeScreen() {
                       ]}
                     >
                       <Bell size={20} color={colors.text} strokeWidth={2} />
-                      {notificationCount > 0 ? (
+                      {badgeCount > 0 ? (
                         <View style={[styles.badge, { backgroundColor: colors.danger }]}>
                           <Text style={styles.badgeText}>
-                            {notificationCount > 9 ? '9+' : notificationCount}
+                            {badgeCount > 9 ? '9+' : badgeCount}
                           </Text>
                         </View>
                       ) : null}
@@ -403,6 +485,13 @@ export function HomeScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <NotificationsInboxSheet
+        visible={inboxOpen}
+        workspaceId={workspaceId}
+        onClose={() => setInboxOpen(false)}
+        onUnreadChange={setUnreadCount}
+      />
     </View>
   );
 }

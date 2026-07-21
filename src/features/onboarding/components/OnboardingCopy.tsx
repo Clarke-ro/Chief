@@ -38,8 +38,8 @@ export function OnboardingCopy({ eyebrow, title, body }: OnboardingCopyProps) {
 const styles = StyleSheet.create({
   wrap: {
     gap: spacing[12],
-    maxWidth: 400,
     width: '100%',
+    alignSelf: 'stretch',
   },
   eyebrow: {
     ...typography.caption,
@@ -54,6 +54,6 @@ const styles = StyleSheet.create({
   body: {
     ...typography.callout,
     lineHeight: 24,
-    maxWidth: 340,
+    width: '100%',
   },
 });

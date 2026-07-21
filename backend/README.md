@@ -6,7 +6,8 @@ Backend for the Chief AI chief-of-staff product.
 
 - **Phase 1:** Foundation (config, Prisma, Redis, BullMQ, health, logging)
 - **Phase 2:** Connection & Integration Platform (Better Auth session, workspaces, official OAuth)
-- **Phase 3 (prep):** Sync-domain schema + BullMQ worker/schedules (no provider pull yet)
+- **Phase 3:** Sync pipeline + worker (Google / Slack / GitHub / Notion resources)
+- **Phase 4+:** Live briefing, notifications (deadline/security), freshness UX
 
 ## Stack
 
@@ -24,6 +25,9 @@ Local `.env` uses `http://localhost:3000`. Production uses the stable Railway HT
 | Auth | `/api/auth/*` (Better Auth) |
 | Me | `GET /v1/me` |
 | Integrations | `/v1/integrations/*` |
+| Brief | `GET /v1/workspace/brief` |
+| Notifications | `GET /v1/workspace/notifications` |
+| Sync freshness | `GET /v1/sync/freshness?workspaceId=` |
 | Swagger | `/docs` |
 
 ## Background jobs
@@ -34,7 +38,9 @@ Local `.env` uses `http://localhost:3000`. Production uses the stable Railway HT
 | Worker | `npm run start:worker:dev` / `start:worker:prod` | Consumes queues + registers cron schedules |
 
 Queues: `sync`, `briefing`, `analytics`, `notifications`, `ai`, `actions`.  
-Default retry: 5 attempts, exponential backoff. Processors are **no-ops** until sync ships.
+Default retry: 5 attempts, exponential backoff.
+
+Live processors: **sync**, **briefing** (`briefing.generate` / morning fan-out), **notifications** (deadline/security dispatch + evening digest).
 
 ## Sync data model
 
@@ -65,7 +71,7 @@ Official OAuth adapters (extend by implementing `ProviderAdapter` + registering 
 | POST | `/v1/integrations/:id/reconnect` | Re-auth for expired tokens |
 | DELETE | `/v1/integrations/:id` | Disconnect + revoke |
 
-Tokens are encrypted at rest (`ENCRYPTION_KEY`). Refresh is automatic via `AccessTokenService` (exported for sync later). **No data sync in this phase.**
+Tokens are encrypted at rest (`ENCRYPTION_KEY`). Refresh is automatic via `AccessTokenService`. Sync pull is live for registered fetchers.
 
 ### Adding a provider
 

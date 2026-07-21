@@ -54,14 +54,15 @@ Design principle: **never expose raw provider data unless necessary.** Every scr
 - **Contextual actions** — Reply / Pay / Prepare / Review open verified Gmail or Calendar links (confirm → handoff); Ask Chief stays in-app
 - **Profile** — connected apps, disconnect, logout (wipes local session/workspace cache)
 - **Secure session** — Better Auth + SecureStore; MMKV for non-secret workspace cache
+- **Notifications & freshness** — in-app deadline/security alerts, Expo push token registration, Home “last synced” label, briefing + notification BullMQ workers
 
 ### In progress / next
 
 - Actions that open or perform real provider handoffs
 - Chief chat grounded in live workspace context
-- Live Tasks & day schedule end-to-end
-- Push / freshness notifications
 - Production hardening (migrations, monitoring, store release)
+
+Today’s schedule (Tasks tab) is first-class — not deferred.
 
 ---
 
@@ -269,6 +270,9 @@ npm run test:e2e         # e2e (requires env)
 | `GET /v1/workspace/brief` | Focus + briefing with synthesized copy |
 | Brief vs Focus | No duplicate IDs across both |
 | Focus detail | Context titles + about/action bodies (not raw mail) |
+| Home last synced | Greeting shows “Synced Xm ago” after sync |
+| Bell → Alerts | Deadline/security inbox; unread badge |
+| Worker briefing.morning | Composes briefs (not no-op logs) |
 
 ---
 
@@ -304,9 +308,9 @@ Where Codex executed changes, GPT-5.6 shaped **what “good” looks like** in c
 
 1. **Executable actions** — Reply / Prepare / Pay / Open deep-link or perform real handoffs into Gmail, Calendar, and billing flows  
 2. **Live Chief chat** — Ask Chief grounded in synced workspace + brief context (reasoning / prompt services)  
-3. **Tasks & schedule** — End-to-end live day plan (backend tasks/schedule modules + UI off mocks)  
+3. **Tasks & schedule** — Live day plan on Today (continue hardening off mocks; not deferred)  
 4. **Provider expansion** — Harden Google; ship Slack / GitHub / Notion sync where valuable  
-5. **Notifications & freshness** — Deadlines, security alerts, last-synced UX; real briefing/notification workers  
+5. ~~**Notifications & freshness**~~ — In-app + push alerts for deadlines/security; Home last-synced; briefing/notification workers live  
 6. **Production hardening** — Reliable migrations, observability, rate limits, E2E CI, strip mock fallbacks in prod builds, App Store / Play + web launch  
 
 ---

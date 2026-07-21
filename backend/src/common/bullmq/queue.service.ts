@@ -63,6 +63,28 @@ export class QueueService {
     });
   }
 
+  /**
+   * Coalesce post-sync brief refreshes per workspace (BullMQ jobId dedupe).
+   * Short delay lets multi-resource sync batches land before compose.
+   */
+  async enqueueBriefingAfterSync(workspaceId: string): Promise<boolean> {
+    const jobId = `brief-after-sync-${workspaceId}`;
+    try {
+      await this.enqueueBriefing(
+        'briefing.generate',
+        { workspaceId, reason: 'after-sync' },
+        { jobId, delay: 4_000 },
+      );
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/already exists|Job.*exist/i.test(message)) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
   async enqueueAnalytics(
     name: AnalyticsJobName,
     data: Record<string, unknown>,

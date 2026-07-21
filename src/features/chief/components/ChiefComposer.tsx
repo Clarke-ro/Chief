@@ -7,13 +7,12 @@ import { fontFamily, radius, spacing, typography } from '@/theme';
 
 /** Workspace / priorities / brief prompts for the empty-state typewriter. */
 export const CHIEF_ASK_PHRASES = [
-  'your investor email',
-  'reviewing PR #182',
   "today's brief",
   'your top priorities',
-  'rescheduling Sprint Planning',
-  'the empty-state decision',
-  'your calendar conflicts',
+  'your calendar',
+  'what needs attention',
+  'this week’s focus',
+  'your schedule',
 ] as const;
 
 type ChiefComposerProps = {
@@ -24,6 +23,8 @@ type ChiefComposerProps = {
   compact?: boolean;
   /** Override rotating phrases (defaults to workspace / priority examples) */
   askPhrases?: readonly string[];
+  /** Disable send while a reply is in flight. */
+  disabled?: boolean;
 };
 
 /** Centered ask field with optional typewriter heading. */
@@ -33,10 +34,11 @@ export function ChiefComposer({
   onSend,
   compact = false,
   askPhrases = CHIEF_ASK_PHRASES,
+  disabled = false,
 }: ChiefComposerProps) {
   const colors = useThemeColors();
   const scheme = useResolvedColorScheme();
-  const canSend = value.trim().length > 0;
+  const canSend = value.trim().length > 0 && !disabled;
   const isDark = scheme === 'dark';
 
   // Fixed pair — never swap when typing (that caused black-on-black / white-on-white)

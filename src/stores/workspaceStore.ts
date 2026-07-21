@@ -57,6 +57,17 @@ type WorkspaceState = {
 
   /** Profile */
   setNotificationEnabled: (id: string, enabled: boolean) => void;
+  /** Apply signed-in user identity to profile + greeting. */
+  applyUserIdentity: (user: {
+    name: string;
+    email: string;
+    image?: string | null;
+  }) => void;
+
+  /** Chief — append a user turn immediately (optimistic). */
+  appendUserTurn: (userTurn: ConversationTurn, titleSeed: string) => void;
+  /** Chief — append Chief reply to the active session. */
+  appendChiefReply: (chiefTurn: ConversationTurn) => void;
 
   /** After log out — reload seed data into memory (storage already cleared). */
   resetAfterLogout: () => void;
@@ -458,6 +469,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   setActiveSessionId: (id) => set({ activeSessionId: id }),
 
   appendChiefTurns: (userTurn, chiefTurn, titleSeed) => {
+    get().appendUserTurn(userTurn, titleSeed);
+    get().appendChiefReply(chiefTurn);
+  },
+
+  appendUserTurn: (userTurn, titleSeed) => {
     const { activeSessionId, sessions } = get();
 
     if (!activeSessionId) {
@@ -467,7 +483,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         title: titleFromPrompt(titleSeed),
         updatedAt: 'Just now',
         preview: titleSeed,
-        turns: [userTurn, chiefTurn],
+        turns: [userTurn],
       };
       const next = [session, ...sessions];
       persistSessions(next);
@@ -482,11 +498,45 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         title: session.turns.length === 0 ? titleFromPrompt(titleSeed) : session.title,
         updatedAt: 'Just now',
         preview: titleSeed,
-        turns: [...session.turns, userTurn, chiefTurn],
+        turns: [...session.turns, userTurn],
       };
     });
     persistSessions(next);
     set({ sessions: next });
+  },
+
+  appendChiefReply: (chiefTurn) => {
+    const { activeSessionId, sessions } = get();
+    if (!activeSessionId) return;
+
+    const next = sessions.map((session) => {
+      if (session.id !== activeSessionId) return session;
+      return {
+        ...session,
+        updatedAt: 'Just now',
+        turns: [...session.turns, chiefTurn],
+      };
+    });
+    persistSessions(next);
+    set({ sessions: next });
+  },
+
+  applyUserIdentity: (user) => {
+    const name = user.name?.trim() || get().profile.user.name;
+    const email = user.email?.trim() || get().profile.user.email;
+    const profile: ProfileSnapshot = {
+      ...get().profile,
+      user: {
+        ...get().profile.user,
+        name,
+        email,
+        avatarUri: user.image ?? get().profile.user.avatarUri,
+      },
+    };
+    set({
+      profile,
+      brief: withProfileName(get().brief, profile),
+    });
   },
 
   setNotificationEnabled: (id, enabled) => {

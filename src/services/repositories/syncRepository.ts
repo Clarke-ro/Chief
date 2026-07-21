@@ -13,6 +13,15 @@ export type SyncStatusResponse = {
   states: SyncStateRow[];
 };
 
+export type SyncFreshnessResponse = {
+  workspaceId: string;
+  lastSyncedAt: string | null;
+  syncing: boolean;
+  failed: boolean;
+  lastError: string | null;
+  resourceCount: number;
+};
+
 export const syncRepository = {
   run(connectedAccountId: string, workspaceId: string, resource?: string) {
     return apiJson<{ ok: boolean; jobName?: string }>(
@@ -33,6 +42,11 @@ export const syncRepository = {
     return apiJson<SyncStatusResponse>(
       `/v1/sync/accounts/${connectedAccountId}?${query.toString()}`,
     );
+  },
+
+  getFreshness(workspaceId: string) {
+    const query = new URLSearchParams({ workspaceId });
+    return apiJson<SyncFreshnessResponse>(`/v1/sync/freshness?${query.toString()}`);
   },
 
   /**
@@ -74,13 +88,19 @@ export const syncRepository = {
   /**
    * Prepare workspace during onboarding: run initial sync, then poll until
    * resources succeed (or timeout). Returns the primary account id if any.
+   * `onProgress` reports real sync fraction so UI meters can match the worker.
    */
   async prepareWorkspace(
     workspaceId: string,
-    opts?: { timeoutMs?: number; pollMs?: number },
+    opts?: {
+      timeoutMs?: number;
+      pollMs?: number;
+      onProgress?: (update: { progress: number; label: string }) => void;
+    },
   ): Promise<{ ready: boolean; accountId: string | null }> {
     const timeoutMs = opts?.timeoutMs ?? 90_000;
     const pollMs = opts?.pollMs ?? 2_000;
+    const onProgress = opts?.onProgress;
     const { integrationsRepository } = await import(
       '@/services/repositories/integrationsRepository'
     );
@@ -88,12 +108,18 @@ export const syncRepository = {
     const account =
       list.connections.find((c) => c.provider === 'google' && c.status !== 'revoked') ??
       list.connections.find((c) => c.status !== 'revoked');
-    if (!account) return { ready: false, accountId: null };
+    if (!account) {
+      onProgress?.({ progress: 0, label: 'No apps connected yet' });
+      return { ready: false, accountId: null };
+    }
 
+    onProgress?.({ progress: 0.08, label: 'Starting sync…' });
     try {
       await syncRepository.runAllConnections(workspaceId);
+      onProgress?.({ progress: 0.18, label: 'Syncing connected apps…' });
     } catch {
       // Still poll — OAuth onboarding sync may already be running.
+      onProgress?.({ progress: 0.15, label: 'Waiting for sync…' });
     }
 
     const started = Date.now();
@@ -102,14 +128,31 @@ export const syncRepository = {
         const status = await syncRepository.getStatus(account.id, workspaceId);
         const states = status.states ?? [];
         if (states.length === 0) {
+          onProgress?.({ progress: 0.22, label: 'Connecting to your apps…' });
           await sleep(pollMs);
           continue;
         }
+        const done = states.filter(
+          (s) => s.status === 'succeeded' || s.status === 'failed',
+        ).length;
         const running = states.some((s) => s.status === 'running');
+        const fraction = done / states.length;
+        // Cap sync phase at 0.82 so brief compose can finish the bar.
+        const progress = 0.2 + fraction * 0.62;
+        const runningResource = states.find((s) => s.status === 'running')?.resource;
+        onProgress?.({
+          progress,
+          label: runningResource
+            ? `Syncing ${runningResource}…`
+            : running
+              ? 'Pulling mail, calendar, and tasks…'
+              : 'Scoring what deserves attention…',
+        });
         const anySuccess = states.some(
           (s) => s.status === 'succeeded' && s.lastSyncedAt,
         );
         if (!running && anySuccess) {
+          onProgress?.({ progress: 0.85, label: 'Sync finished' });
           return { ready: true, accountId: account.id };
         }
       } catch {
@@ -118,6 +161,7 @@ export const syncRepository = {
       await sleep(pollMs);
     }
 
+    onProgress?.({ progress: 0.85, label: 'Taking longer than usual…' });
     return { ready: false, accountId: account.id };
   },
 };

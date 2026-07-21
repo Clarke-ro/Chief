@@ -62,9 +62,12 @@ export function ChiefScreen() {
   const activeSessionId = useWorkspaceStore((s) => s.activeSessionId);
   const setActiveSessionId = useWorkspaceStore((s) => s.setActiveSessionId);
   const appendChiefTurns = useWorkspaceStore((s) => s.appendChiefTurns);
+  const appendUserTurn = useWorkspaceStore((s) => s.appendUserTurn);
+  const appendChiefReply = useWorkspaceStore((s) => s.appendChiefReply);
   const [draft, setDraft] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [thinking, setThinking] = useState(false);
 
   const closeHistory = useCallback(() => setHistoryOpen(false), []);
   const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
@@ -105,13 +108,17 @@ export function ChiefScreen() {
   const appendPrompt = useCallback(
     (prompt: string) => {
       const text = prompt.trim();
-      if (!text) return;
+      if (!text || thinking) return;
       setDraft('');
       const userTurn: ConversationTurn = {
         id: `u-${Date.now()}`,
         role: 'user',
         content: text,
       };
+
+      // Surface the user message immediately, then show thinking until reply lands.
+      appendUserTurn(userTurn, text);
+      setThinking(true);
 
       const state = useWorkspaceStore.getState();
       const history =
@@ -122,22 +129,21 @@ export function ChiefScreen() {
           : undefined;
 
       void (async () => {
-        if (!chiefChatRepository.shouldUseLiveChat()) {
-          appendTurns(userTurn, offlineChiefReply(text), text);
-          return;
-        }
-
         try {
+          if (!chiefChatRepository.shouldUseLiveChat()) {
+            appendChiefReply(offlineChiefReply(text));
+            return;
+          }
+
           const live = await chiefChatRepository.send(text, {
             history,
             focusId,
           });
-          const chiefTurn: ConversationTurn = {
+          appendChiefReply({
             id: `c-${Date.now() + 1}`,
             role: 'chief',
             content: live.content.trim() || 'I need a bit more context to help with that.',
-          };
-          appendTurns(userTurn, chiefTurn, text);
+          });
         } catch (error) {
           const detail =
             error instanceof ApiError
@@ -148,19 +154,17 @@ export function ChiefScreen() {
               : error instanceof ApiNetworkError
                 ? error.message
                 : 'Something went wrong.';
-          appendTurns(
-            userTurn,
-            {
-              id: `c-${Date.now() + 1}`,
-              role: 'chief',
-              content: `${detail} I couldn't finish this reply with your live workspace context.`,
-            },
-            text,
-          );
+          appendChiefReply({
+            id: `c-${Date.now() + 1}`,
+            role: 'chief',
+            content: `${detail} I couldn't finish this reply with your live workspace context.`,
+          });
+        } finally {
+          setThinking(false);
         }
       })();
     },
-    [appendTurns, params.focusId],
+    [appendChiefReply, appendUserTurn, params.focusId, thinking],
   );
 
   /** Actionable → user bubble + intro + editable canvas; related chips (not Open Gmail) */
@@ -283,7 +287,11 @@ export function ChiefScreen() {
                 removeClippedSubviews={Platform.OS === 'android'}
               >
                 <Pressable onPress={dismissKeyboard} accessible={false}>
-                  <ConversationThread turns={activeSession.turns} onAction={onAction} />
+                  <ConversationThread
+                    turns={activeSession.turns}
+                    onAction={onAction}
+                    thinking={thinking}
+                  />
                 </Pressable>
               </ScrollView>
 
@@ -302,6 +310,7 @@ export function ChiefScreen() {
                   onChangeText={setDraft}
                   onSend={onSend}
                   compact
+                  disabled={thinking}
                 />
               </View>
             </>
@@ -316,6 +325,7 @@ export function ChiefScreen() {
                   value={draft}
                   onChangeText={setDraft}
                   onSend={onSend}
+                  disabled={thinking}
                 />
               </View>
             </Pressable>

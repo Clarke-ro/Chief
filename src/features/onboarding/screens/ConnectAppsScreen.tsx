@@ -99,10 +99,12 @@ export function ConnectAppsScreen() {
       });
       await queryClient.invalidateQueries({ queryKey: queryKeys.integrations(workspaceId) });
       if (result.ok) {
-        try {
-          await syncRepository.runFirstConnection(workspaceId);
-        } catch {
-          // Worker may still pick up the API onboarding enqueue.
+        if (workspaceId) {
+          try {
+            await syncRepository.runFirstConnection(workspaceId);
+          } catch {
+            // Worker may still pick up the API onboarding enqueue.
+          }
         }
         void useWorkspaceStore.getState().refreshBrief();
         return;

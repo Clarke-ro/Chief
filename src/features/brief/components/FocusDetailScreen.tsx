@@ -2,7 +2,7 @@ import { ArrowLeft, MoreHorizontal, Star } from 'lucide-react-native';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { EmptyState, PlatformLogo } from '@/components/ui';
+import { AppChip, EmptyState, PlatformLogo } from '@/components/ui';
 import type { FocusAction, FocusItem } from '@/features/brief/types';
 import { PRIORITY_STARS } from '@/features/brief/types';
 import { useThemeColors } from '@/hooks/useThemeColors';
@@ -59,8 +59,7 @@ export function FocusDetailScreen({
   const priorityColor = colors.priority[item.priority];
   const confidencePct = Math.round(item.confidence * 100);
   const footerPad = Math.max(insets.bottom, spacing[16]);
-  const actionCount = item.actions.length;
-  const footerHeight = spacing[12] + actionCount * 52 + (actionCount - 1) * spacing[8] + footerPad;
+  const footerHeight = spacing[12] + 40 + footerPad;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
@@ -74,15 +73,19 @@ export function FocusDetailScreen({
         >
           <ArrowLeft size={22} color={colors.text} strokeWidth={2} />
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="More options"
-          hitSlop={12}
-          onPress={onMore}
-          style={({ pressed }) => [styles.navBtn, pressed && styles.pressed]}
-        >
-          <MoreHorizontal size={22} color={colors.text} strokeWidth={2} />
-        </Pressable>
+        {onMore ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="More options"
+            hitSlop={12}
+            onPress={onMore}
+            style={({ pressed }) => [styles.navBtn, pressed && styles.pressed]}
+          >
+            <MoreHorizontal size={22} color={colors.text} strokeWidth={2} />
+          </Pressable>
+        ) : (
+          <View style={styles.navBtn} />
+        )}
       </View>
 
       <ScrollView
@@ -164,35 +167,20 @@ export function FocusDetailScreen({
           },
         ]}
       >
-        {item.actions.map((action, index) => {
-          const isAccent = action.tone === 'accent' || index === item.actions.length - 1;
-          return (
-            <Pressable
-              key={action.id}
-              accessibilityRole="button"
-              accessibilityLabel={action.label}
-              onPress={() => onActionPress?.(action)}
-              style={({ pressed }) => [
-                styles.actionBtn,
-                {
-                  backgroundColor: isAccent ? colors.accent : colors.bgElevated,
-                  borderColor: isAccent ? colors.accent : colors.border,
-                  opacity: pressed ? 0.85 : 1,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.actionLabel,
-                  { color: isAccent ? '#FFFFFF' : colors.text },
-                ]}
-                numberOfLines={1}
-              >
-                {action.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+        <View style={styles.actionRow}>
+          {item.actions.map((action, index) => {
+            const isAccent = action.tone === 'accent' || index === item.actions.length - 1;
+            return (
+              <AppChip
+                key={action.id}
+                label={action.label}
+                tone={isAccent ? 'accent' : action.tone ?? 'neutral'}
+                size="sm"
+                onPress={() => onActionPress?.(action)}
+              />
+            );
+          })}
+        </View>
       </View>
     </View>
   );
@@ -315,23 +303,14 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    gap: spacing[8],
-    paddingHorizontal: spacing[20],
+    paddingHorizontal: spacing[16],
     paddingTop: spacing[12],
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  actionBtn: {
-    minHeight: 52,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
+  actionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing[16],
-  },
-  actionLabel: {
-    ...typography.callout,
-    fontFamily: fontFamily.bold,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    gap: spacing[8],
   },
 });

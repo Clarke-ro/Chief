@@ -3,6 +3,7 @@ import {
   ConnectedAccountStatus,
   IntegrationProvider,
   SyncResource,
+  SyncRunStatus,
   type ConnectedAccount,
 } from '@prisma/client';
 import type { AuthUser } from '../auth/decorators/current-user.decorator';
@@ -40,6 +41,42 @@ export class SyncService {
         lastError: s.lastError,
         meta: s.meta,
       })),
+    };
+  }
+
+  /** Workspace-level freshness for Home “last synced” UX. */
+  async getWorkspaceFreshness(user: AuthUser, workspaceId: string) {
+    await this.membership.requireMembership(user.id, workspaceId);
+
+    const states = await this.prisma.syncState.findMany({
+      where: { workspaceId },
+      select: {
+        resource: true,
+        status: true,
+        lastSyncedAt: true,
+        lastError: true,
+        connectedAccount: { select: { provider: true, status: true } },
+      },
+    });
+
+    const active = states.filter(
+      (s) => s.connectedAccount.status !== ConnectedAccountStatus.revoked,
+    );
+    const running = active.some((s) => s.status === SyncRunStatus.running);
+    const failed = active.find((s) => s.status === SyncRunStatus.failed);
+    const latest = active
+      .map((s) => s.lastSyncedAt)
+      .filter((v): v is Date => Boolean(v))
+      .sort((a, b) => a.getTime() - b.getTime())
+      .at(-1);
+
+    return {
+      workspaceId,
+      lastSyncedAt: latest?.toISOString() ?? null,
+      syncing: running,
+      failed: Boolean(failed),
+      lastError: failed?.lastError ?? null,
+      resourceCount: active.length,
     };
   }
 

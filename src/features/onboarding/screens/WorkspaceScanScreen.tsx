@@ -10,40 +10,25 @@ import { useThemeColors } from '@/hooks/useThemeColors';
 import { ensureActiveWorkspaceId } from '@/services';
 import { briefRepository } from '@/services/repositories/briefRepository';
 import { syncRepository } from '@/services/repositories/syncRepository';
-import { useWorkspaceStore } from '@/stores';
+import { usePreferencesStore, useWorkspaceStore } from '@/stores';
 import { duration, spacing, typography } from '@/theme';
 
-const PHASES = [
-  'Connecting to your apps…',
-  'Pulling mail, calendar, and tasks…',
-  'Scoring what deserves attention…',
-  'Building your first brief…',
-] as const;
-
 /**
- * Step 4 — prepare workspace from live sync (no mock scan).
- * Waits until brief has real content (or timeout), then continues.
+ * Prepare workspace from live sync.
+ * Progress bar tracks real sync/brief work — completes when background work finishes.
  */
 export function WorkspaceScanScreen() {
   const colors = useThemeColors();
   const router = useRouter();
   const refreshBrief = useWorkspaceStore((s) => s.refreshBrief);
+  const completeOnboarding = usePreferencesStore((s) => s.completeOnboarding);
 
-  const [phase, setPhase] = useState(0);
+  const [progress, setProgress] = useState(0.05);
   const [status, setStatus] = useState('Preparing your workspace…');
   const [error, setError] = useState<string | null>(null);
   const [canContinue, setCanContinue] = useState(false);
   const [ready, setReady] = useState(false);
   const started = useRef(false);
-
-  const progress = Math.min(1, (phase + 1) / PHASES.length);
-
-  useEffect(() => {
-    const tick = setInterval(() => {
-      setPhase((p) => (p < PHASES.length - 1 ? p + 1 : p));
-    }, 2200);
-    return () => clearInterval(tick);
-  }, []);
 
   useEffect(() => {
     if (started.current) return;
@@ -52,18 +37,20 @@ export function WorkspaceScanScreen() {
     void (async () => {
       try {
         const workspaceId = await ensureActiveWorkspaceId();
-        setStatus('Syncing connected apps…');
         const prep = await syncRepository.prepareWorkspace(workspaceId, {
           timeoutMs: 90_000,
           pollMs: 2000,
+          onProgress: ({ progress: next, label }) => {
+            setProgress(next);
+            setStatus(label);
+          },
         });
 
+        setProgress(0.88);
         setStatus('Composing your brief…');
-        // Force a fresh compose after sync (brief may have been empty/stale).
         await refreshBrief();
         let brief = useWorkspaceStore.getState().brief;
 
-        // Poll brief briefly if sync finished but compose raced.
         const until = Date.now() + 20_000;
         while (
           Date.now() < until &&
@@ -78,12 +65,14 @@ export function WorkspaceScanScreen() {
         briefRepository.persistCache(brief, workspaceId);
 
         if (brief.focus.length > 0 || brief.briefing.length > 0) {
+          setProgress(1);
           setReady(true);
           setStatus('Workspace ready');
           setCanContinue(true);
           return;
         }
 
+        setProgress(1);
         setStatus(
           prep.ready
             ? 'Sync finished — Chief will keep learning as more mail arrives.'
@@ -91,6 +80,7 @@ export function WorkspaceScanScreen() {
         );
         setCanContinue(true);
       } catch (err) {
+        setProgress(1);
         setError(
           err instanceof Error ? err.message : 'Could not prepare workspace',
         );
@@ -106,11 +96,16 @@ export function WorkspaceScanScreen() {
         canContinue ? (
           <AppButton
             size="lg"
-            onPress={() =>
-              router.replace(ready ? '/onboarding/brief' : '/onboarding/ready')
-            }
+            onPress={() => {
+              if (ready) {
+                router.replace('/onboarding/brief');
+                return;
+              }
+              completeOnboarding();
+              router.replace('/home');
+            }}
           >
-            {ready ? 'Show my brief' : 'Continue'}
+            {ready ? 'Show my brief' : 'Continue to Home'}
           </AppButton>
         ) : null
       }
@@ -125,14 +120,13 @@ export function WorkspaceScanScreen() {
         <View style={styles.meter}>
           <ProgressBar progress={progress} height={4} color={colors.accent} />
           <Animated.Text
-            key={PHASES[phase]}
+            key={status}
             entering={FadeIn.duration(duration.fast)}
             style={[styles.phase, { color: colors.textSecondary }]}
             accessibilityLiveRegion="polite"
           >
-            {PHASES[phase]}
+            {status}
           </Animated.Text>
-          <Text style={[styles.status, { color: colors.textTertiary }]}>{status}</Text>
           {error ? (
             <Text style={[styles.error, { color: colors.danger }]}>
               {error}
@@ -160,9 +154,6 @@ const styles = StyleSheet.create({
   phase: {
     ...typography.body,
     marginTop: spacing[8],
-  },
-  status: {
-    ...typography.caption,
   },
   error: {
     ...typography.caption,

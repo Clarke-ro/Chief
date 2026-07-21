@@ -23,7 +23,7 @@ export function ProfileIdentity({ user, onEdit }: ProfileIdentityProps) {
           backgroundColor: colors.bgElevated,
         },
       ]}
-      accessibilityLabel={`${user.name}, ${user.email}, ${user.plan} plan`}
+      accessibilityLabel={`${user.name}, ${user.email}`}
     >
       <Avatar uri={user.avatarUri} name={user.name} size="xl" />
 
@@ -34,24 +34,25 @@ export function ProfileIdentity({ user, onEdit }: ProfileIdentityProps) {
         <Text style={[styles.email, { color: colors.textSecondary }]} numberOfLines={1}>
           {user.email}
         </Text>
-        <Text style={[styles.plan, { color: colors.accent }]}>{user.plan} Plan</Text>
       </View>
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Edit Profile"
-        onPress={onEdit}
-        hitSlop={8}
-        style={({ pressed }) => [
-          styles.edit,
-          {
-            backgroundColor: colors.bgSubtle,
-            opacity: pressed ? 0.75 : 1,
-          },
-        ]}
-      >
-        <Pencil size={16} color={colors.text} strokeWidth={2} />
-      </Pressable>
+      {onEdit ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Edit Profile"
+          onPress={onEdit}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.edit,
+            {
+              backgroundColor: colors.bgSubtle,
+              opacity: pressed ? 0.75 : 1,
+            },
+          ]}
+        >
+          <Pencil size={16} color={colors.text} strokeWidth={2} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -77,12 +78,6 @@ const styles = StyleSheet.create({
   },
   email: {
     ...typography.footnote,
-  },
-  plan: {
-    ...typography.caption,
-    fontFamily: fontFamily.semibold,
-    fontWeight: '600',
-    marginTop: spacing[2],
   },
   edit: {
     width: 40,
