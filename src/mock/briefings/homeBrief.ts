@@ -9,8 +9,9 @@ export const homeBrief: HomeBrief = {
     {
       id: 'f1',
       platform: 'github',
-      title: 'Review and merge PR #182',
-      reason: 'Blocks deployment of the payment flow.',
+      title: 'Review and merge PR #182 so payment flow can deploy today',
+      reason:
+        'Blocks deployment of the payment flow. Three teammates are waiting — staging is green and only your merge remains. Est. 12 min',
       estimatedTime: '12 min',
       priority: 'high',
       confidence: 0.96,
@@ -29,8 +30,9 @@ export const homeBrief: HomeBrief = {
     {
       id: 'f2',
       platform: 'gmail',
-      title: 'Reply to investor email',
-      reason: 'Draft is ready — a same-day reply keeps momentum.',
+      title: 'Reply to the investor email today while the draft still has momentum',
+      reason:
+        'A same-day reply keeps the conversation warm. Your draft already covers runway, hiring, and the next demo. Est. 15 min',
       estimatedTime: '15 min',
       priority: 'high',
       confidence: 0.9,
@@ -92,48 +94,54 @@ export const homeBrief: HomeBrief = {
       id: 's1',
       platform: 'github',
       section: 'Projects',
-      title: 'Merge PR #182',
-      summary: '3 teammates approved — ready to ship payment flow.',
+      title: 'Merge PR #182 so payment-flow deployment can ship today',
+      summary:
+        'Three teammates already approved. Staging is green — your merge is the remaining blocker before the customer demo.',
       timestamp: '12m ago',
     },
     {
       id: 's2',
       platform: 'github',
       section: 'Projects',
-      title: 'Check CI flake on main',
-      summary: 'Nightly auth tests failed once, then passed on retry.',
+      title: 'Check the CI flake on main before it hides a real auth regression',
+      summary:
+        'Nightly auth tests failed once, then passed on retry. Confirm whether this needs a pin or quarantine.',
       timestamp: '40m ago',
     },
     {
       id: 's3',
       platform: 'slack',
       section: 'Needs Attention',
-      title: 'Approve campaign copy',
-      summary: 'Sarah needs your sign-off before marketing can publish.',
+      title: 'Approve the campaign copy so marketing can publish on schedule',
+      summary:
+        'Sarah is blocked in #marketing until you sign off. A quick yes/no with edits unblocks the launch thread.',
       timestamp: '25m ago',
     },
     {
       id: 's4',
       platform: 'slack',
       section: 'Needs Attention',
-      title: 'Decide empty-state direction',
-      summary: 'Engineering is blocked until Maya gets your call.',
+      title: 'Decide empty-state direction so engineering can finish the polish pass',
+      summary:
+        'Maya needs illustration-led vs copy-first. Your call unblocks tonight’s staging cut.',
       timestamp: '50m ago',
     },
     {
       id: 's5',
       platform: 'calendar',
       section: 'Meetings',
-      title: 'Prepare for 1:00 PM design review',
-      summary: '4 attendees · agenda may need your notes.',
+      title: 'Prepare for the 1:00 PM design review with clear asks',
+      summary:
+        'Four attendees are on the invite. Skim the latest frames and list two decisions you need from the room.',
       timestamp: '30m ago',
     },
     {
       id: 's6',
       platform: 'notion',
       section: 'Projects',
-      title: 'Review Q3 Roadmap updates',
-      summary: '2 new Launch tasks assigned to you.',
+      title: 'Review the two new Launch tasks assigned to you on the Q3 Roadmap',
+      summary:
+        'Confirm owners, due dates, and whether either belongs on today’s Top Priorities.',
       timestamp: '45m ago',
     },
   ],

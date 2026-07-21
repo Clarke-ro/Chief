@@ -20,14 +20,13 @@ import {
   BRIEF_SECTION_ORDER,
   buildActionReason,
   briefSectionFor,
-  classifyWorkKind,
   contextualOpenLabel,
   estimatedMinutesFor,
   RELEVANCE_THRESHOLDS,
   scoreCalendarEvent,
   scoreEmail,
   scoreTask,
-  toActionableTitle,
+  synthesizeWorkCopy,
   type BriefSection,
   type WorkKind,
 } from './relevance.scorer';
@@ -352,7 +351,16 @@ export class BriefingService {
     });
 
     const focus: FocusItemDto[] = rankedFocus.slice(0, 6).map(({ relevance: _r, ...item }) => item);
+
+    // Never resurface a Top Priority item again in Today's Brief.
+    const focusKeys = new Set(focus.map((item) => item.id));
     const briefing: BriefingSignalDto[] = briefingCandidates
+      .filter((candidate) => {
+        if (focusKeys.has(candidate.id)) return false;
+        if (focusKeys.has(`mail-${candidate.id}`)) return false;
+        if (focusKeys.has(`event-${candidate.id}`)) return false;
+        return true;
+      })
       .slice(0, 10)
       .map(({ relevance: _r, ...item }) => item)
       .sort((a, b) => sectionRank(a.section) - sectionRank(b.section));
@@ -413,28 +421,29 @@ export class BriefingService {
     relevance: number,
   ): FocusItemDto {
     const platform = mapPlatform(task.platform, task.provider, 'notion');
-    const workKind = classifyWorkKind({
+    const synthesized = synthesizeWorkCopy({
       kind: 'task',
       title: task.title,
       snippet: task.description,
       bodyText: task.details,
+      dueAt: task.dueAt,
     });
     const estimatedTime =
       task.estimatedTime?.trim() ||
       (task.estimatedMinutes != null
         ? `${task.estimatedMinutes} min`
-        : estimatedMinutesFor(workKind));
-    const title = toActionableTitle({ kind: 'task', title: task.title });
-    const openLabel = contextualOpenLabel(workKind);
+        : estimatedMinutesFor(synthesized.workKind));
+    const openLabel = contextualOpenLabel(synthesized.workKind);
 
     return {
       id: task.id,
       platform,
-      title,
+      title: synthesized.headline,
       reason: buildActionReason({
-        workKind,
+        workKind: synthesized.workKind,
         title: task.title,
         snippet: task.description.trim() || task.details.trim() || null,
+        bodyText: task.details,
         dueAt: task.dueAt,
         estimatedTime,
       }),
@@ -447,20 +456,17 @@ export class BriefingService {
         { id: `${task.id}-open`, label: openLabel },
       ],
       urgencyLabel:
-        workKind === 'deadline'
+        synthesized.workKind === 'deadline'
           ? 'Deadline'
           : task.priority === TaskPriority.high
             ? 'High priority'
             : task.priority === TaskPriority.medium
               ? 'Today'
               : 'When ready',
-      whyImportant:
-        task.details.trim() ||
-        task.description.trim() ||
-        'This is actionable work that deserves attention today.',
+      whyImportant: synthesized.detail,
       delayImpact:
         'Leaving this open may push other commitments later in the day.',
-      aiRecommendation: 'Start this in your next focused block.',
+      aiRecommendation: recommendationForWorkKind(synthesized.workKind),
     };
   }
 
@@ -478,29 +484,25 @@ export class BriefingService {
     relevance: number,
   ): FocusItemDto {
     const subject = email.subject?.trim() || 'Email thread';
-    const workKind = classifyWorkKind({
-      kind: 'email',
-      title: subject,
-      snippet: email.snippet,
-      bodyText: email.bodyText,
-    });
-    const estimatedTime = estimatedMinutesFor(workKind);
-    const title = toActionableTitle({
+    const synthesized = synthesizeWorkCopy({
       kind: 'email',
       title: subject,
       fromName: email.fromName,
       snippet: email.snippet,
+      bodyText: email.bodyText,
     });
-    const openLabel = contextualOpenLabel(workKind);
+    const estimatedTime = estimatedMinutesFor(synthesized.workKind);
+    const openLabel = contextualOpenLabel(synthesized.workKind);
 
     return {
       id: `mail-${email.id}`,
       platform: mapPlatform('gmail', email.provider, 'gmail'),
-      title,
+      title: synthesized.headline,
       reason: buildActionReason({
-        workKind,
+        workKind: synthesized.workKind,
         title: subject,
         snippet: email.snippet,
+        bodyText: email.bodyText,
         fromName: email.fromName,
         estimatedTime,
       }),
@@ -512,12 +514,10 @@ export class BriefingService {
         { id: `${email.id}-ask`, label: 'Ask Chief' },
         { id: `${email.id}-open`, label: openLabel },
       ],
-      urgencyLabel: urgencyForWorkKind(workKind, relevance),
-      whyImportant:
-        email.snippet?.trim() ||
-        'This looks like real work — a deadline, decision, or reply.',
+      urgencyLabel: urgencyForWorkKind(synthesized.workKind, relevance),
+      whyImportant: synthesized.detail,
       delayImpact: 'Ignoring this may miss a deadline or block someone waiting on you.',
-      aiRecommendation: recommendationForWorkKind(workKind),
+      aiRecommendation: recommendationForWorkKind(synthesized.workKind),
     };
   }
 
@@ -532,26 +532,22 @@ export class BriefingService {
     },
     relevance: number,
   ): FocusItemDto {
-    const workKind = classifyWorkKind({
-      kind: 'event',
-      title: event.title,
-      snippet: event.description,
-    });
-    const estimatedTime = estimatedMinutesFor(workKind);
-    const title = toActionableTitle({
+    const synthesized = synthesizeWorkCopy({
       kind: 'event',
       title: event.title,
       startsAt: event.startsAt,
       snippet: event.description,
+      bodyText: event.location,
     });
+    const estimatedTime = estimatedMinutesFor(synthesized.workKind);
     return {
       id: `event-${event.id}`,
       platform: mapPlatform('calendar', event.provider, 'calendar'),
-      title,
+      title: synthesized.headline,
       reason: buildActionReason({
-        workKind,
+        workKind: synthesized.workKind,
         title: event.title,
-        snippet: event.location,
+        snippet: event.description || event.location,
         startsAt: event.startsAt,
         estimatedTime,
       }),
@@ -561,10 +557,10 @@ export class BriefingService {
       actions: [
         { id: `${event.id}-done`, label: 'Mark done', tone: 'accent' },
         { id: `${event.id}-ask`, label: 'Ask Chief' },
-        { id: `${event.id}-open`, label: contextualOpenLabel(workKind) },
+        { id: `${event.id}-open`, label: contextualOpenLabel(synthesized.workKind) },
       ],
       urgencyLabel: 'Meeting',
-      whyImportant: 'Prepare so you walk in ready — agenda, asks, and decisions.',
+      whyImportant: synthesized.detail,
       delayImpact: 'Showing up unprepared wastes the meeting and follow-ups pile up.',
       aiRecommendation: 'Skim notes and list 2–3 outcomes before it starts.',
     };
@@ -584,29 +580,19 @@ export class BriefingService {
     relevance: number,
   ): BriefingSignalDto {
     const subject = email.subject?.trim() || 'Needs a look';
-    const workKind = classifyWorkKind({
-      kind: 'email',
-      title: subject,
-      snippet: email.snippet,
-      bodyText: email.bodyText,
-    });
-    const section = briefSectionFor(workKind);
-    const title = toActionableTitle({
+    const synthesized = synthesizeWorkCopy({
       kind: 'email',
       title: subject,
       fromName: email.fromName,
       snippet: email.snippet,
+      bodyText: email.bodyText,
     });
     return {
       id: email.id,
       platform: mapPlatform('gmail', email.provider, 'gmail'),
-      section,
-      title,
-      summary:
-        email.snippet?.trim() ||
-        (relevance >= 0.65
-          ? 'Action likely needed'
-          : `Update · ${email.fromName || 'Inbox'}`),
+      section: briefSectionFor(synthesized.workKind),
+      title: synthesized.headline,
+      summary: synthesized.detail,
       timestamp: formatRelative(email.receivedAt),
     };
   }
@@ -620,30 +606,24 @@ export class BriefingService {
     endsAt: Date;
     location: string | null;
   }): BriefingSignalDto {
-    const workKind = classifyWorkKind({
+    const synthesized = synthesizeWorkCopy({
       kind: 'event',
       title: event.title,
+      startsAt: event.startsAt,
       snippet: event.description,
+      bodyText: event.location,
     });
     const time = event.startsAt.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
     });
-    const summary = event.location?.trim()
-      ? `${time} · ${event.location.trim()}`
-      : `Starts ${time}`;
     return {
       id: event.id,
       platform: mapPlatform('calendar', event.provider, 'calendar'),
-      section: briefSectionFor(workKind),
-      title: toActionableTitle({
-        kind: 'event',
-        title: event.title,
-        startsAt: event.startsAt,
-        snippet: event.description,
-      }),
-      summary,
+      section: briefSectionFor(synthesized.workKind),
+      title: synthesized.headline,
+      summary: synthesized.detail || `Starts ${time}`,
       timestamp: time,
     };
   }
@@ -673,7 +653,7 @@ function hasBriefContent(brief: HomeBriefDto): boolean {
   return brief.focus.length > 0 || brief.briefing.length > 0;
 }
 
-/** True when cached brief still mirrors inbox-style copy / grouping. */
+/** True when cached brief still uses older presentation rules. */
 function needsPresentationRefresh(brief: HomeBriefDto): boolean {
   if (brief.successLabel === 'Packed' || brief.successLabel === 'Clear focus') {
     return true;
@@ -685,6 +665,24 @@ function needsPresentationRefresh(brief: HomeBriefDto): boolean {
     return true;
   }
   if (brief.briefing.length > 0 && brief.briefing.every((signal) => !signal.section)) {
+    return true;
+  }
+  // Recompose when Brief still duplicates a Focus item (pre-dedupe cache).
+  const focusKeys = new Set(brief.focus.map((item) => item.id));
+  if (
+    brief.briefing.some(
+      (signal) =>
+        focusKeys.has(signal.id) ||
+        focusKeys.has(`mail-${signal.id}`) ||
+        focusKeys.has(`event-${signal.id}`),
+    )
+  ) {
+    return true;
+  }
+  // Older headlines were short subject-style truncations (< 40 chars often).
+  if (
+    brief.focus.some((item) => /^(Respond to|Follow up:|Submit:|Approve:)/i.test(item.title))
+  ) {
     return true;
   }
   return false;

@@ -79,6 +79,27 @@ function fallbackSection(platform: PlatformId): string {
   }
 }
 
+/** Focus headline — tap expands/collapses long synthesized copy. */
+function ExpandableFocusTitle({ title, color }: { title: string; color: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ expanded }}
+      accessibilityLabel={`${title}. ${expanded ? 'Collapse' : 'Expand'}`}
+      onPress={(e) => {
+        e?.stopPropagation?.();
+        setExpanded((prev) => !prev);
+      }}
+      style={styles.focusTitlePress}
+    >
+      <Text style={[styles.focusTitle, { color }]} numberOfLines={expanded ? undefined : 2}>
+        {title}
+      </Text>
+    </Pressable>
+  );
+}
+
 /** Home — AI briefing: "What should I do today?" */
 export function HomeScreen() {
   const colors = useThemeColors();
@@ -96,7 +117,16 @@ export function HomeScreen() {
   const [query, setQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const dateLabel = useMemo(() => formatTodayLabel(), []);
-  const briefingGroups = useMemo(() => groupByBriefSection(brief.briefing), [brief.briefing]);
+  const briefingGroups = useMemo(() => {
+    const focusIds = new Set(brief.focus.map((item) => item.id));
+    const unique = brief.briefing.filter(
+      (signal) =>
+        !focusIds.has(signal.id) &&
+        !focusIds.has(`mail-${signal.id}`) &&
+        !focusIds.has(`event-${signal.id}`),
+    );
+    return groupByBriefSection(unique);
+  }, [brief.briefing, brief.focus]);
 
   const kickedSync = useRef(false);
 
@@ -308,47 +338,50 @@ export function HomeScreen() {
                         {index + 1}
                       </Text>
                       <View style={styles.focusCard}>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={`Open details for ${item.title}`}
-                          onPress={() => openFocus(item.id)}
-                        >
-                          <View style={styles.focusHeader}>
+                        <View style={styles.focusHeader}>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Open details for ${item.title}`}
+                            onPress={() => openFocus(item.id)}
+                            hitSlop={8}
+                          >
                             <PlatformLogo platform={item.platform} size={26} />
-                            <View style={styles.focusCopy}>
-                              <View style={styles.focusMeta}>
+                          </Pressable>
+                          <View style={styles.focusCopy}>
+                            <View style={styles.focusMeta}>
+                              <Text
+                                style={[styles.focusApp, { color: colors.textSecondary }]}
+                                numberOfLines={1}
+                              >
+                                {item.urgencyLabel}
+                              </Text>
+                              <View style={styles.focusMetaTrailing}>
+                                <PriorityBadge priority={item.priority} size="sm" />
                                 <Text
-                                  style={[styles.focusApp, { color: colors.textSecondary }]}
+                                  style={[styles.focusTime, { color: colors.textTertiary }]}
                                   numberOfLines={1}
                                 >
-                                  {item.urgencyLabel}
+                                  {item.estimatedTime}
                                 </Text>
-                                <View style={styles.focusMetaTrailing}>
-                                  <PriorityBadge priority={item.priority} size="sm" />
-                                  <Text
-                                    style={[styles.focusTime, { color: colors.textTertiary }]}
-                                    numberOfLines={1}
-                                  >
-                                    {item.estimatedTime}
-                                  </Text>
-                                </View>
-                              </View>
-                              <View style={styles.focusTitleRow}>
-                                <Text
-                                  style={[styles.focusTitle, { color: colors.text }]}
-                                  numberOfLines={1}
-                                >
-                                  {item.title}
-                                </Text>
-                                <ChevronRight size={14} color={colors.textTertiary} strokeWidth={2} />
                               </View>
                             </View>
+                            <View style={styles.focusTitleRow}>
+                              <ExpandableFocusTitle title={item.title} color={colors.text} />
+                              <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={`Open details for ${item.title}`}
+                                onPress={() => openFocus(item.id)}
+                                hitSlop={8}
+                              >
+                                <ChevronRight size={14} color={colors.textTertiary} strokeWidth={2} />
+                              </Pressable>
+                            </View>
                           </View>
-                        </Pressable>
+                        </View>
                         <View style={styles.focusThread}>
                           <FocusRow
                             item={item}
-                            onPress={() => openFocus(item.id)}
+                            onOpenDetail={() => openFocus(item.id)}
                             onActionPress={(action) => onFocusAction(item.id, action)}
                           />
                         </View>
@@ -362,13 +395,13 @@ export function HomeScreen() {
 
           <View>
             <HomeSection title="Today's brief">
-              {brief.briefing.length === 0 ? (
+              {briefingGroups.length === 0 ? (
                 <EmptyState
                   icon={Inbox}
                   title="Brief is quiet"
                   description={
                     env.liveHomeBrief
-                      ? 'After sync, Chief groups what needs attention — deadlines, security, career, and more.'
+                      ? 'Priorities already cover the urgent work — or pull to refresh after sync for more context.'
                       : 'Briefing signals will show up here.'
                   }
                 />
@@ -529,8 +562,13 @@ const styles = StyleSheet.create({
   focusTitleRow: {
     flexDirection: 'row',
     flexWrap: 'nowrap',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing[4],
+    minWidth: 0,
+  },
+  focusTitlePress: {
+    flexGrow: 1,
+    flexShrink: 1,
     minWidth: 0,
   },
   focusTitle: {
@@ -538,9 +576,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.semibold,
     fontWeight: '600',
     letterSpacing: -0.2,
-    flexGrow: 1,
-    flexShrink: 1,
-    minWidth: 0,
   },
   focusThread: {
     paddingHorizontal: spacing[12],

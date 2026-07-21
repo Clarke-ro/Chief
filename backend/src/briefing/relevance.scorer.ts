@@ -197,28 +197,52 @@ export function scoreTask(input: {
   return clamp01(score);
 }
 
-/** Outcome-first Top Priority title — what to do, not what arrived. */
-export function toActionableTitle(input: {
+type SynthesisInput = {
   kind: 'email' | 'event' | 'task';
   title: string;
   fromName?: string | null;
   startsAt?: Date | null;
+  dueAt?: Date | null;
   snippet?: string | null;
-}): string {
+  bodyText?: string | null;
+  now?: Date;
+};
+
+/**
+ * Synthesize Chief-of-Staff copy from workspace signals.
+ * Imperative, specific, and outcome-led — never a raw subject dump.
+ */
+export function synthesizeWorkCopy(input: SynthesisInput): {
+  headline: string;
+  detail: string;
+  workKind: WorkKind;
+} {
+  const now = input.now ?? new Date();
   const raw = stripReFwd(input.title.trim() || 'Untitled');
-  const blob = `${raw} ${input.snippet ?? ''}`;
-  const work = classifyWorkKind({
+  const detailSource = cleanDetailText(input.bodyText || input.snippet || '');
+  const blob = `${raw} ${input.snippet ?? ''} ${input.bodyText ?? ''}`;
+  const workKind = classifyWorkKind({
     kind: input.kind,
     title: raw,
     snippet: input.snippet,
+    bodyText: input.bodyText,
   });
+  const who = cleanSenderName(input.fromName) || extractEntity(raw);
+  const deadlineHint = input.dueAt
+    ? formatRelativeDeadline(input.dueAt, now)
+    : inferDeadlineHint(raw, input.snippet);
+
+  let headline: string;
+  let detail: string;
 
   if (input.kind === 'task') {
-    if (ACTION_VERBS.test(raw)) return truncate(raw, 72);
-    return truncate(`Complete: ${raw}`, 72);
-  }
-
-  if (input.kind === 'event' || work === 'meeting') {
+    headline = ACTION_VERBS.test(raw) ? raw : `Complete ${raw}`;
+    detail =
+      detailSource ||
+      (input.dueAt
+        ? `Due ${formatRelativeDeadline(input.dueAt, now)} — finish this before it blocks the rest of your day.`
+        : 'Move this forward in your next focused block.');
+  } else if (input.kind === 'event' || workKind === 'meeting') {
     const when = input.startsAt
       ? input.startsAt.toLocaleTimeString('en-US', {
           hour: 'numeric',
@@ -227,89 +251,147 @@ export function toActionableTitle(input: {
         })
       : null;
     const clean = raw.replace(/^(meeting|sync|call):\s*/i, '').trim() || raw;
-    return truncate(when ? `Prepare for ${when} meeting — ${clean}` : `Prepare for ${clean}`, 72);
-  }
-
-  if (/\bbuild\s*week\b/i.test(blob) || /\bhackathon\b/i.test(blob)) {
-    const project = raw
-      .replace(/\b(hackathon|build week|deadline|due|reminder)\b/gi, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    return truncate(`Submit ${project || 'Build Week project'}`, 72);
-  }
-
-  if (work === 'invoice' || /\bbilling\b/i.test(blob)) {
-    const who =
-      input.fromName?.replace(/\s*(inc|llc|ltd|billing|noreply).*$/i, '').trim() ||
-      extractEntity(raw) ||
-      'billing';
-    return truncate(`Resolve ${who} billing issue`, 72);
-  }
-
-  if (work === 'security') {
-    return truncate('Review security alert', 72);
-  }
-
-  if (work === 'career') {
-    if (/\binterview\b/i.test(blob)) {
-      return truncate(`Prepare for interview — ${raw}`, 72);
+    headline = when
+      ? `Prepare for your ${when} meeting — ${clean}`
+      : `Prepare for ${clean}`;
+    detail =
+      detailSource ||
+      'Skim notes and list 2–3 outcomes so you walk in ready to decide.';
+  } else if (/\bbuild\s*week\b/i.test(blob) || /\bhackathon\b/i.test(blob) || /\bdevpost\b/i.test(blob)) {
+    headline = deadlineHint
+      ? `Submit your Build Week project before the deadline ${deadlineHint === 'Today' ? 'today' : deadlineHint}`
+      : 'Submit your Build Week project before the deadline';
+    detail =
+      detailSource ||
+      'Confirm submission requirements, share anything reviewers need, and upload demo materials early.';
+  } else if (workKind === 'invoice' || /\b(billing|payment|subscription|charge)\b/i.test(blob)) {
+    const brand = who || extractBrand(blob) || 'this subscription';
+    if (/\b(failed|declined|couldn't|could not|update.*(card|payment)|payment method)\b/i.test(blob)) {
+      headline = `Update your payment method for ${brand} to resolve the billing problem`;
+      detail =
+        detailSource ||
+        'Fix the failed charge promptly to avoid interruption or account limits.';
+    } else {
+      headline = `Resolve the ${brand} billing issue before service is interrupted`;
+      detail =
+        detailSource ||
+        'Verify the amount and settle or escalate if the charge looks wrong.';
     }
-    return truncate(`Complete assessment — ${raw}`, 72);
+  } else if (workKind === 'security') {
+    const place = blob.match(/\b(?:from|in)\s+([A-Z][a-zA-Z]+(?:,\s*[A-Z][a-zA-Z]+)?)/)?.[1];
+    const account = who || extractBrand(blob) || 'your account';
+    headline = place
+      ? `Review unrecognized access on ${account} from ${place}`
+      : `Review the security alert on ${account}`;
+    detail =
+      detailSource ||
+      'Confirm this was you — if not, revoke the session and reset credentials immediately.';
+  } else if (workKind === 'career') {
+    const org = who || extractBrand(blob) || 'the recruitment team';
+    if (/\binterview\b/i.test(blob)) {
+      headline = `Prepare for your interview with ${org}`;
+      detail =
+        detailSource ||
+        'Review the role requirements and block prep time before the conversation.';
+    } else if (/\b(receipt|received|confirmed)\b/i.test(blob)) {
+      headline = `${org} confirmed receipt — track next steps on your application`;
+      detail =
+        detailSource ||
+        'Watch for assessment results or follow-up requests so nothing stalls.';
+    } else {
+      headline = `Complete the assessment or application step for ${org}`;
+      detail =
+        detailSource ||
+        'Review requirements and schedule focused time to finish while momentum is high.';
+    }
+  } else if (workKind === 'approval') {
+    headline = who
+      ? `Review and approve the request from ${who}`
+      : `Review and approve: ${raw}`;
+    detail =
+      detailSource ||
+      'Decide approve / request changes, then reply so others are not blocked.';
+  } else if (workKind === 'deadline') {
+    headline = deadlineHint
+      ? `Finish “${shortSubject(raw)}” — due ${deadlineHint}`
+      : `Finish “${shortSubject(raw)}” before the deadline`;
+    detail =
+      detailSource ||
+      'Confirm the deliverable and block time now while you still have runway.';
+  } else if (workKind === 'document') {
+    headline = `Review ${shortSubject(raw)} and leave clear decisions`;
+    detail =
+      detailSource ||
+      'Scan for asks that need your call, then comment or reply once.';
+  } else if (who) {
+    headline = `Respond to ${who} about ${shortSubject(raw)}`;
+    detail =
+      detailSource ||
+      'Decide reply, schedule, or delegate — then clear it from your plate.';
+  } else {
+    headline = `Follow up on ${shortSubject(raw)}`;
+    detail =
+      detailSource ||
+      'Turn this into a next step so it does not linger as open loop.';
   }
 
-  if (work === 'approval') {
-    return truncate(`Approve: ${raw}`, 72);
-  }
-
-  if (work === 'deadline') {
-    return truncate(`Submit: ${raw}`, 72);
-  }
-
-  if (work === 'document') {
-    return truncate(`Review: ${raw}`, 72);
-  }
-
-  const from = input.fromName?.trim();
-  if (from) {
-    return truncate(`Respond to ${from}`, 72);
-  }
-  return truncate(`Follow up: ${raw}`, 72);
+  return {
+    headline: truncate(collapseWhitespace(headline), 140),
+    detail: truncate(collapseWhitespace(detail), 220),
+    workKind,
+  };
 }
 
-/** Supporting line under the title — deadline / stakes / effort, not “thread from…”. */
+/** @deprecated Prefer synthesizeWorkCopy — kept for call sites that only need a headline. */
+export function toActionableTitle(input: {
+  kind: 'email' | 'event' | 'task';
+  title: string;
+  fromName?: string | null;
+  startsAt?: Date | null;
+  snippet?: string | null;
+  bodyText?: string | null;
+}): string {
+  return synthesizeWorkCopy(input).headline;
+}
+
+/** Supporting line under the title — stakes and next step, not “thread from…”. */
 export function buildActionReason(input: {
   workKind: WorkKind;
   title: string;
   snippet?: string | null;
+  bodyText?: string | null;
   fromName?: string | null;
   dueAt?: Date | null;
   startsAt?: Date | null;
   estimatedTime: string;
   now?: Date;
 }): string {
+  const synthesized = synthesizeWorkCopy({
+    kind:
+      input.workKind === 'meeting'
+        ? 'event'
+        : input.workKind === 'task'
+          ? 'task'
+          : 'email',
+    title: input.title,
+    fromName: input.fromName,
+    startsAt: input.startsAt,
+    dueAt: input.dueAt,
+    snippet: input.snippet,
+    bodyText: input.bodyText,
+    now: input.now,
+  });
+
   const now = input.now ?? new Date();
-  const parts: string[] = [];
+  const timing = input.dueAt
+    ? `Deadline: ${formatRelativeDeadline(input.dueAt, now)}`
+    : input.startsAt
+      ? `When: ${formatRelativeDeadline(input.startsAt, now)}`
+      : null;
 
-  if (input.dueAt) {
-    parts.push(`Deadline: ${formatRelativeDeadline(input.dueAt, now)}`);
-  } else if (input.startsAt) {
-    parts.push(`When: ${formatRelativeDeadline(input.startsAt, now)}`);
-  } else if (input.workKind === 'deadline') {
-    parts.push(inferDeadlineHint(input.title, input.snippet) ?? 'Time-sensitive');
-  } else if (input.workKind === 'invoice') {
-    parts.push('Payment may be required to avoid interruption');
-  } else if (input.workKind === 'security') {
-    parts.push('Confirm this was you');
-  } else if (input.workKind === 'meeting') {
-    parts.push('Walk in prepared');
-  } else if (input.snippet?.trim()) {
-    parts.push(truncate(input.snippet.trim(), 64));
-  } else if (input.fromName) {
-    parts.push(`From ${input.fromName}`);
-  }
-
-  parts.push(`Est. ${input.estimatedTime}`);
-  return parts.join(' · ');
+  return collapseWhitespace(
+    [timing, synthesized.detail, `Est. ${input.estimatedTime}`].filter(Boolean).join(' · '),
+  );
 }
 
 /** Primary open/handoff label — next logical step, not generic “Open”. */
@@ -360,18 +442,59 @@ export function estimatedMinutesFor(workKind: WorkKind): string {
 
 function extractEntity(subject: string): string | null {
   const cleaned = stripReFwd(subject)
-    .replace(/\b(invoice|payment|billing|receipt|issue|alert)\b/gi, '')
+    .replace(/\b(invoice|payment|billing|receipt|issue|alert|subscription)\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
   if (!cleaned || cleaned.length < 2) return null;
   return cleaned.split(/[-–|:]/)[0]?.trim() || cleaned;
 }
 
+function cleanSenderName(name?: string | null): string | null {
+  const trimmed = name?.trim();
+  if (!trimmed) return null;
+  const cleaned = trimmed
+    .replace(/\s*(inc|llc|ltd|billing|noreply|no-reply|notifications?)\b.*$/i, '')
+    .replace(/via\s+.+$/i, '')
+    .trim();
+  return cleaned.length >= 2 ? cleaned : trimmed;
+}
+
+function extractBrand(blob: string): string | null {
+  const known =
+    blob.match(
+      /\b(Apple|Google|GitHub|Notion|OpenAI|Devpost|Stripe|Railway|AmaliTech|Eversend|Microsoft|Slack|Linear|Figma|AWS|Kling|Instories)\b/i,
+    )?.[1];
+  return known ?? null;
+}
+
+function shortSubject(subject: string): string {
+  const cleaned = stripReFwd(subject)
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (cleaned.length <= 48) return cleaned;
+  return `${cleaned.slice(0, 47)}…`;
+}
+
+function cleanDetailText(value: string): string {
+  const cleaned = collapseWhitespace(
+    value
+      .replace(/https?:\/\/\S+/gi, '')
+      .replace(/\b(unsubscribe|view in browser|privacy policy)\b.*$/gim, '')
+      .replace(/[<>]/g, ' '),
+  );
+  if (cleaned.length < 24) return '';
+  return cleaned;
+}
+
+function collapseWhitespace(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
 function inferDeadlineHint(title: string, snippet?: string | null): string | null {
   const blob = `${title} ${snippet ?? ''}`;
-  if (/\btomorrow\b/i.test(blob)) return 'Deadline: Tomorrow';
-  if (/\btoday\b/i.test(blob)) return 'Deadline: Today';
-  if (/\bthis week\b/i.test(blob)) return 'Deadline: This week';
+  if (/\btomorrow\b/i.test(blob)) return 'Tomorrow';
+  if (/\btoday\b/i.test(blob)) return 'Today';
+  if (/\bthis week\b/i.test(blob)) return 'This week';
   return null;
 }
 
