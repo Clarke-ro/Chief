@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   IntegrationProvider,
   TaskPriority,
@@ -38,6 +38,8 @@ type RankedFocus = FocusItemDto & { relevance: number };
 
 @Injectable()
 export class BriefingService {
+  private readonly logger = new Logger(BriefingService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly membership: MembershipService,
@@ -149,21 +151,12 @@ export class BriefingService {
       }
     }
 
-    await this.prisma.focusDismissal.upsert({
-      where: {
-        workspaceId_sourceKey: { workspaceId: wsId, sourceKey: key },
-      },
-      create: {
-        workspaceId: wsId,
-        userId: user.id,
-        sourceKey: key,
-        sourceType,
-        title,
-      },
-      update: {
-        dismissedAt: new Date(),
-        title: title ?? undefined,
-      },
+    await this.recordDismissal({
+      workspaceId: wsId,
+      userId: user.id,
+      sourceKey: key,
+      sourceType,
+      title,
     });
 
     // Force recompose so Home drops the item immediately.
@@ -173,6 +166,65 @@ export class BriefingService {
     });
 
     return this.getHomeBrief(user, wsId);
+  }
+
+  /** Safe when focus_dismissal migration hasn't landed yet (SKIP_PRISMA_MIGRATE). */
+  private async loadDismissals(
+    workspaceId: string,
+  ): Promise<Array<{ sourceKey: string }>> {
+    try {
+      return await this.prisma.focusDismissal.findMany({
+        where: { workspaceId },
+        select: { sourceKey: true },
+      });
+    } catch (error) {
+      this.logger.warn(
+        {
+          err: error instanceof Error ? error.message : String(error),
+          workspaceId,
+        },
+        'focus_dismissal unavailable — composing brief without dismissals',
+      );
+      return [];
+    }
+  }
+
+  private async recordDismissal(input: {
+    workspaceId: string;
+    userId: string;
+    sourceKey: string;
+    sourceType: string;
+    title: string | null;
+  }) {
+    try {
+      await this.prisma.focusDismissal.upsert({
+        where: {
+          workspaceId_sourceKey: {
+            workspaceId: input.workspaceId,
+            sourceKey: input.sourceKey,
+          },
+        },
+        create: {
+          workspaceId: input.workspaceId,
+          userId: input.userId,
+          sourceKey: input.sourceKey,
+          sourceType: input.sourceType,
+          title: input.title,
+        },
+        update: {
+          dismissedAt: new Date(),
+          title: input.title ?? undefined,
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        {
+          err: error instanceof Error ? error.message : String(error),
+          sourceKey: input.sourceKey,
+        },
+        'Could not persist focus dismissal — brief still recomposes',
+      );
+    }
   }
 
   private async composeBrief(user: AuthUser, workspaceId: string): Promise<HomeBriefDto> {
@@ -208,10 +260,7 @@ export class BriefingService {
         orderBy: { startsAt: 'asc' },
         take: 24,
       }),
-      this.prisma.focusDismissal.findMany({
-        where: { workspaceId },
-        select: { sourceKey: true },
-      }),
+      this.loadDismissals(workspaceId),
     ]);
 
     const dismissed = new Set(dismissals.map((d) => d.sourceKey));
