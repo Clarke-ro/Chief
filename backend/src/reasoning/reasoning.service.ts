@@ -11,6 +11,7 @@ export type ChiefChatHistoryTurn = {
 
 export type ChiefChatResult = {
   content: string;
+  provider: string;
   model: string;
   workspaceId: string;
 };
@@ -57,19 +58,16 @@ export class ReasoningService {
       workspaceContext: context,
     });
 
-    const content = await this.openai.completeChiefReply({
+    const reply = await this.openai.completeChiefReply({
       instructions: this.prompts.getChiefSystemPrompt(),
       userPayload,
     });
 
     return {
-      content,
-      model: this.configAiModel(),
+      content: reply.content,
+      provider: reply.provider,
+      model: reply.model,
       workspaceId,
     };
-  }
-
-  private configAiModel(): string {
-    return this.openai.isConfigured() ? 'openai' : 'mock';
   }
 }

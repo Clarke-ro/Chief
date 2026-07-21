@@ -4,17 +4,13 @@ import {
   CurrentUser,
   type AuthUser,
 } from '../auth/decorators/current-user.decorator';
-import { AppConfigService } from '../common/config/app-config.service';
 import { ReasoningService } from '../reasoning/reasoning.service';
 import { ChiefChatBodyDto } from './dto/chief-chat.dto';
 
 @ApiTags('chief')
 @Controller('chief')
 export class ConversationsController {
-  constructor(
-    private readonly reasoning: ReasoningService,
-    private readonly config: AppConfigService,
-  ) {}
+  constructor(private readonly reasoning: ReasoningService) {}
 
   @Post('chat')
   @ApiBearerAuth()
@@ -32,8 +28,8 @@ export class ConversationsController {
     return {
       content: result.content,
       workspaceId: result.workspaceId,
-      provider: this.config.ai.provider,
-      model: this.config.ai.model,
+      provider: result.provider,
+      model: result.model,
     };
   }
 }

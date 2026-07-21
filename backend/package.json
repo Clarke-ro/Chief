@@ -31,6 +31,7 @@
     "@better-auth/infra": "^0.3.6",
     "@better-auth/prisma-adapter": "^1.6.23",
     "@better-auth/utils": "^0.4.2",
+    "@google/genai": "^2.13.0",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",

@@ -5,27 +5,42 @@ import {
 } from '@nestjs/common';
 import OpenAI from 'openai';
 import { AppConfigService } from '../common/config/app-config.service';
+import { GeminiService } from './gemini.service';
 
-export type LlmChatTurn = {
-  role: 'user' | 'chief';
+export type ChiefLlmProvider = 'openai' | 'gemini';
+
+export type ChiefLlmResult = {
   content: string;
+  provider: ChiefLlmProvider;
+  model: string;
 };
 
+/**
+ * Primary OpenAI path with Gemini fallback when OpenAI is unset or fails.
+ */
 @Injectable()
 export class OpenAiService {
   private readonly logger = new Logger(OpenAiService.name);
   private client: OpenAI | null = null;
 
-  constructor(private readonly config: AppConfigService) {}
+  constructor(
+    private readonly config: AppConfigService,
+    private readonly gemini: GeminiService,
+  ) {}
 
   isConfigured(): boolean {
+    return this.isOpenAiConfigured() || this.gemini.isConfigured();
+  }
+
+  isOpenAiConfigured(): boolean {
     return (
-      this.config.ai.provider === 'openai' && Boolean(this.config.ai.apiKey.trim())
+      this.config.ai.provider !== 'mock' &&
+      Boolean(this.config.ai.apiKey.trim())
     );
   }
 
-  private getClient(): OpenAI {
-    if (!this.isConfigured()) {
+  private getOpenAiClient(): OpenAI {
+    if (!this.isOpenAiConfigured()) {
       throw new ServiceUnavailableException(
         'Chief chat is not configured (missing OPENAI_API_KEY).',
       );
@@ -36,35 +51,65 @@ export class OpenAiService {
     return this.client;
   }
 
+  private async completeWithOpenAi(input: {
+    instructions: string;
+    userPayload: string;
+  }): Promise<ChiefLlmResult> {
+    const client = this.getOpenAiClient();
+    const model = this.config.ai.model;
+
+    const response = await client.responses.create({
+      model,
+      instructions: input.instructions,
+      input: input.userPayload,
+    });
+
+    const text = response.output_text?.trim();
+    if (!text) {
+      throw new Error('OpenAI response missing output_text');
+    }
+
+    return { content: text, provider: 'openai', model };
+  }
+
   /**
-   * Responses API — stable `instructions` first; variable payload as `input`.
+   * Try OpenAI first when configured; on failure (or if unset), use Gemini.
    */
   async completeChiefReply(input: {
     instructions: string;
     userPayload: string;
-  }): Promise<string> {
-    const client = this.getClient();
-    const model = this.config.ai.model;
-
-    try {
-      const response = await client.responses.create({
-        model,
-        instructions: input.instructions,
-        input: input.userPayload,
-      });
-
-      const text = response.output_text?.trim();
-      if (text) return text;
-
-      this.logger.warn('OpenAI response missing output_text');
-      throw new ServiceUnavailableException('Chief returned an empty reply.');
-    } catch (error) {
-      if (error instanceof ServiceUnavailableException) throw error;
-      const message = error instanceof Error ? error.message : 'Unknown OpenAI error';
-      this.logger.error(`OpenAI request failed: ${message}`);
+  }): Promise<ChiefLlmResult> {
+    if (!this.isConfigured()) {
       throw new ServiceUnavailableException(
-        'Chief could not reach the language model. Try again shortly.',
+        'Chief chat is not configured (set OPENAI_API_KEY and/or GEMINI_API_KEY).',
       );
     }
+
+    if (this.isOpenAiConfigured()) {
+      try {
+        return await this.completeWithOpenAi(input);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown OpenAI error';
+        this.logger.warn(`OpenAI failed — attempting Gemini fallback: ${message}`);
+        if (!this.gemini.isConfigured()) {
+          throw new ServiceUnavailableException(
+            'Chief could not reach OpenAI and no Gemini fallback is configured.',
+          );
+        }
+      }
+    } else if (!this.gemini.isConfigured()) {
+      throw new ServiceUnavailableException(
+        'Chief chat is not configured (missing OPENAI_API_KEY and GEMINI_API_KEY).',
+      );
+    } else {
+      this.logger.log('OpenAI unset — using Gemini for Chief chat');
+    }
+
+    const content = await this.gemini.completeChiefReply(input);
+    return {
+      content,
+      provider: 'gemini',
+      model: this.config.ai.geminiModel,
+    };
   }
 }

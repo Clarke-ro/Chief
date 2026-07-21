@@ -32,9 +32,12 @@ export type AppConfig = {
     notion: OAuthProviderCredentials;
   };
   ai: {
-    provider: 'openai' | 'mock';
+    /** Primary preference when OpenAI is available; mock only if no keys at all. */
+    provider: 'openai' | 'gemini' | 'mock';
     apiKey: string;
     model: string;
+    geminiApiKey: string;
+    geminiModel: string;
   };
   logLevel: Env['LOG_LEVEL'];
   swaggerEnabled: boolean;
@@ -89,9 +92,17 @@ export function buildConfiguration(env: Env): AppConfig {
       },
     },
     ai: {
-      provider: env.OPENAI_API_KEY ? env.AI_PROVIDER : 'mock',
+      provider: env.OPENAI_API_KEY
+        ? env.AI_PROVIDER === 'mock'
+          ? 'mock'
+          : 'openai'
+        : env.GEMINI_API_KEY
+          ? 'gemini'
+          : 'mock',
       apiKey: env.OPENAI_API_KEY,
       model: env.AI_MODEL || 'gpt-5.6',
+      geminiApiKey: env.GEMINI_API_KEY,
+      geminiModel: env.GEMINI_MODEL || 'gemini-2.5-flash',
     },
     logLevel: env.LOG_LEVEL,
     swaggerEnabled:
