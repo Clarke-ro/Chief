@@ -188,6 +188,15 @@ export class SyncService {
     if (provider === IntegrationProvider.microsoft) {
       return [SyncResource.email, SyncResource.calendar];
     }
+    if (provider === IntegrationProvider.slack) {
+      return [SyncResource.messages];
+    }
+    if (
+      provider === IntegrationProvider.github ||
+      provider === IntegrationProvider.notion
+    ) {
+      return [SyncResource.tasks];
+    }
     return [];
   }
 

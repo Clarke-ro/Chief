@@ -11,6 +11,9 @@ import {
   GoogleGmailFetcher,
   GoogleTasksFetcher,
 } from './providers/google';
+import { GitHubIssuesFetcher } from './providers/github/github-issues.fetcher';
+import { NotionPagesFetcher } from './providers/notion/notion-pages.fetcher';
+import { SlackMessagesFetcher } from './providers/slack/slack-messages.fetcher';
 
 /**
  * Sync core — fetchers, pipeline, orchestrator.
@@ -22,6 +25,9 @@ import {
     GoogleGmailFetcher,
     GoogleCalendarFetcher,
     GoogleTasksFetcher,
+    GitHubIssuesFetcher,
+    NotionPagesFetcher,
+    SlackMessagesFetcher,
     SyncFetcherRegistry,
     SyncPolicyService,
     SyncPersistService,

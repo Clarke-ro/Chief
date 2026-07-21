@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { TaskSection, TaskStatus } from '@prisma/client';
+import { IntegrationProvider, TaskSection, TaskStatus } from '@prisma/client';
 import type { AuthUser } from '../auth/decorators/current-user.decorator';
 import { BriefingService } from '../briefing/briefing.service';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -11,6 +11,8 @@ const EMAIL_LIMIT = 8;
 const MEETING_LIMIT = 8;
 const TASK_LIMIT = 12;
 const DEADLINE_LIMIT = 8;
+const GITHUB_LIMIT = 8;
+const SLACK_LIMIT = 8;
 const SNIPPET_MAX = 180;
 
 function clip(value: string | null | undefined, max = SNIPPET_MAX): string {
@@ -45,7 +47,8 @@ export class ContextEngineService {
     const horizon = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     const emailSince = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
 
-    const [brief, meetings, emails, tasks] = await Promise.all([
+    const [brief, meetings, emails, tasks, githubTasks, slackMessages] =
+      await Promise.all([
       this.briefing.getHomeBrief(user, wsId),
       this.prisma.calendarEvent.findMany({
         where: {
@@ -99,6 +102,38 @@ export class ContextEngineService {
           dueAt: true,
           dueLabel: true,
           estimatedTime: true,
+        },
+      }),
+      this.prisma.task.findMany({
+        where: {
+          workspaceId: wsId,
+          provider: IntegrationProvider.github,
+          status: { not: TaskStatus.done },
+        },
+        orderBy: [{ updatedAt: 'desc' }],
+        take: GITHUB_LIMIT,
+        select: {
+          id: true,
+          title: true,
+          description: true,
+        },
+      }),
+      this.prisma.providerMessage.findMany({
+        where: {
+          workspaceId: wsId,
+          provider: IntegrationProvider.slack,
+          OR: [
+            { sentAt: { gte: emailSince } },
+            { sentAt: null, syncedAt: { gte: emailSince } },
+          ],
+        },
+        orderBy: [{ sentAt: 'desc' }],
+        take: SLACK_LIMIT,
+        select: {
+          id: true,
+          text: true,
+          channelName: true,
+          authorName: true,
         },
       }),
     ]);
@@ -157,9 +192,18 @@ export class ContextEngineService {
         receivedAt: email.receivedAt?.toISOString(),
         isUnread: email.isUnread,
       })),
-      // Provider sync for these lands later — keep slots stable for the prompt contract.
-      github: [],
-      slack: [],
+      github: githubTasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        summary: clip(task.description, SNIPPET_MAX) || undefined,
+      })),
+      slack: slackMessages.map((msg) => ({
+        id: msg.id,
+        title: msg.channelName
+          ? `#${msg.channelName}${msg.authorName ? ` · ${msg.authorName}` : ''}`
+          : msg.authorName || 'Slack',
+        summary: clip(msg.text, SNIPPET_MAX) || undefined,
+      })),
       tasks: tasks.map((task) => ({
         id: task.id,
         title: task.title,

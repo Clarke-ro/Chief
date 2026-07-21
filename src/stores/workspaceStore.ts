@@ -39,6 +39,7 @@ type WorkspaceState = {
   listFocus: () => FocusItem[];
 
   /** Today schedule */
+  refreshDayPlan: () => Promise<void>;
   addDayPlanItem: (item: DayPlanItem) => void;
   updateDayPlanItem: (id: string, patch: Partial<DayPlanItem>) => void;
   removeDayPlanItem: (id: string) => void;
@@ -115,15 +116,16 @@ function seedDayPlan(): DayPlanItem[] {
 function readDayPlan(workspaceId?: WorkspaceId): DayPlanItem[] {
   const keys = dataKeys(workspaceId);
   const raw = readScopedString(keys.dayPlan, LEGACY_KEYS.dayPlan);
-  if (!raw) return seedDayPlan();
+  const emptyFallback = () => (env.liveHomeBrief ? [] : seedDayPlan());
+  if (!raw) return emptyFallback();
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) return seedDayPlan();
+    if (!Array.isArray(parsed) || parsed.length === 0) return emptyFallback();
     const items = parsed.filter(isDayPlanItem);
-    if (items.length === 0) return seedDayPlan();
+    if (items.length === 0) return emptyFallback();
     return sortDayPlan(items);
   } catch {
-    return seedDayPlan();
+    return emptyFallback();
   }
 }
 
@@ -316,11 +318,48 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   listFocus: () => get().brief.focus,
 
+  refreshDayPlan: async () => {
+    const { brief, analytics } = get();
+    try {
+      const loaded = await dayPlanRepository.fetchDayPlan();
+      const dayPlan = sortDayPlan(loaded);
+      persistDayPlan(dayPlan);
+      const synced = syncProgress(brief, analytics, dayPlan);
+      set({ dayPlan, ...synced });
+    } catch (error) {
+      if (__DEV__) {
+        console.warn('[workspaceStore] refreshDayPlan failed', error);
+      }
+    }
+  },
+
   addDayPlanItem: (item) => {
     const dayPlan = sortDayPlan([...get().dayPlan, item]);
     persistDayPlan(dayPlan);
     const synced = syncProgress(get().brief, get().analytics, dayPlan);
     set({ dayPlan, ...synced });
+
+    if (!env.liveHomeBrief) return;
+    void (async () => {
+      try {
+        const created = await dayPlanRepository.create(item);
+        const next = sortDayPlan(
+          get().dayPlan.map((row) => (row.id === item.id ? created : row)),
+        );
+        // If optimistic id already removed, append server.
+        const hasCreated = next.some((row) => row.id === created.id);
+        const merged = hasCreated
+          ? next
+          : sortDayPlan([...get().dayPlan.filter((row) => row.id !== item.id), created]);
+        persistDayPlan(merged);
+        set({ dayPlan: merged, ...syncProgress(get().brief, get().analytics, merged) });
+      } catch (error) {
+        if (__DEV__) {
+          console.warn('[workspaceStore] addDayPlanItem failed', error);
+        }
+        await get().refreshDayPlan();
+      }
+    })();
   },
 
   updateDayPlanItem: (id, patch) => {
@@ -330,6 +369,23 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     persistDayPlan(dayPlan);
     const synced = syncProgress(get().brief, get().analytics, dayPlan);
     set({ dayPlan, ...synced });
+
+    if (!env.liveHomeBrief) return;
+    void (async () => {
+      try {
+        const updated = await dayPlanRepository.update(id, patch);
+        const next = sortDayPlan(
+          get().dayPlan.map((item) => (item.id === id || item.id === updated.id ? updated : item)),
+        );
+        persistDayPlan(next);
+        set({ dayPlan: next, ...syncProgress(get().brief, get().analytics, next) });
+      } catch (error) {
+        if (__DEV__) {
+          console.warn('[workspaceStore] updateDayPlanItem failed', error);
+        }
+        await get().refreshDayPlan();
+      }
+    })();
   },
 
   removeDayPlanItem: (id) => {
@@ -337,6 +393,18 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     persistDayPlan(dayPlan);
     const synced = syncProgress(get().brief, get().analytics, dayPlan);
     set({ dayPlan, ...synced });
+
+    if (!env.liveHomeBrief) return;
+    void (async () => {
+      try {
+        await dayPlanRepository.remove(id);
+      } catch (error) {
+        if (__DEV__) {
+          console.warn('[workspaceStore] removeDayPlanItem failed', error);
+        }
+        await get().refreshDayPlan();
+      }
+    })();
   },
 
   setDayPlanStatus: (id, status) => {
@@ -351,6 +419,33 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     persistDayPlan(sorted);
     const synced = syncProgress(brief, get().analytics, sorted);
     set({ dayPlan: sorted, ...synced });
+
+    if (!env.liveHomeBrief) return;
+    const prevById = new Map(dayPlan.map((item) => [item.id, item]));
+    for (const item of sorted) {
+      const prev = prevById.get(item.id);
+      if (!prev) continue;
+      if (
+        prev.status === item.status &&
+        prev.sweepPhase === item.sweepPhase &&
+        prev.lastSweepAt === item.lastSweepAt
+      ) {
+        continue;
+      }
+      // Skip unsynced optimistic client ids until create lands.
+      if (item.id.startsWith('plan-')) continue;
+      void dayPlanRepository
+        .update(item.id, {
+          status: item.status,
+          sweepPhase: item.sweepPhase,
+          lastSweepAt: item.lastSweepAt,
+        })
+        .catch((error) => {
+          if (__DEV__) {
+            console.warn('[workspaceStore] sweep persist failed', error);
+          }
+        });
+    }
   },
 
   resetDayPlan: () => {

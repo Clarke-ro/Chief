@@ -10,6 +10,7 @@ import { SyncFetcherRegistry } from '../fetch/sync-fetcher.registry';
 import { SyncPersistService } from '../persist/sync-persist.service';
 import { SyncPolicyService } from '../policies/sync-policy.service';
 import { GoogleApiError } from '../providers/google';
+import { ProviderApiError } from '../providers/provider-http';
 import type { SyncReason } from '../sync.types';
 
 @Injectable()
@@ -102,6 +103,14 @@ export class SyncPipelineService {
         window,
       });
 
+      // Soft reconnect signal from fetchers (insufficient scope, etc.).
+      if (batch.meta?.needsReconnect === true) {
+        await this.markNeedsReauth(
+          account.id,
+          'Provider requires reconnect (scope or token)',
+        );
+      }
+
       await this.persist.accept(batch);
 
       await this.prisma.syncState.update({
@@ -126,26 +135,42 @@ export class SyncPipelineService {
         stub: batch.stub ?? false,
       };
     } catch (error) {
-      const message =
-        error instanceof GoogleApiError
-          ? `${error.message}${error.bodySnippet ? `: ${error.bodySnippet}` : ''}`
-          : error instanceof Error
-            ? error.message
-            : 'sync_failed';
+      const apiError =
+        error instanceof GoogleApiError || error instanceof ProviderApiError
+          ? error
+          : null;
+      const message = apiError
+        ? `${apiError.message}${apiError.bodySnippet ? `: ${apiError.bodySnippet}` : ''}`
+        : error instanceof Error
+          ? error.message
+          : 'sync_failed';
 
-      if (error instanceof GoogleApiError && error.status === 401) {
+      if (apiError?.status === 401) {
         this.logger.warn(
           {
             connectedAccountId: input.connectedAccountId,
             resource: input.resource,
           },
-          'Provider token rejected during fetch — reauth likely required',
+          'Provider token rejected during fetch — marking needs_reauth',
         );
+        await this.markNeedsReauth(account.id, message);
       }
 
       await this.failState(state.id, message);
       throw error;
     }
+  }
+
+  private async markNeedsReauth(connectedAccountId: string, message: string) {
+    await this.prisma.connectedAccount.update({
+      where: { id: connectedAccountId },
+      data: {
+        status: ConnectedAccountStatus.needs_reauth,
+        lastHealthOk: false,
+        lastHealthCheckAt: new Date(),
+        lastHealthMessage: message.slice(0, 500),
+      },
+    });
   }
 
   private async failState(stateId: string, message: string) {

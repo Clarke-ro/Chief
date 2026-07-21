@@ -10,6 +10,12 @@ export type ConnectedApp = {
   provider?: string;
   needsReauth?: boolean;
   accountLabel?: string | null;
+  /** False when server lacks OAuth client credentials for this provider. */
+  configured?: boolean;
+  healthOk?: boolean | null;
+  healthMessage?: string | null;
+  /** Amber UI when reconnect or failed health. */
+  syncWarning?: boolean;
 };
 
 export type NotificationPref = {

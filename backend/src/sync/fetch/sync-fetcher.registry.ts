@@ -5,6 +5,9 @@ import {
   GoogleGmailFetcher,
   GoogleTasksFetcher,
 } from '../providers/google';
+import { GitHubIssuesFetcher } from '../providers/github/github-issues.fetcher';
+import { NotionPagesFetcher } from '../providers/notion/notion-pages.fetcher';
+import { SlackMessagesFetcher } from '../providers/slack/slack-messages.fetcher';
 import type { FetchContext, RawSyncBatch, SyncResourceFetcher } from '../sync.types';
 import { emptyBatch } from './sync-fetcher';
 
@@ -34,16 +37,19 @@ export class SyncFetcherRegistry {
     googleGmail: GoogleGmailFetcher,
     googleCalendar: GoogleCalendarFetcher,
     googleTasks: GoogleTasksFetcher,
+    githubIssues: GitHubIssuesFetcher,
+    notionPages: NotionPagesFetcher,
+    slackMessages: SlackMessagesFetcher,
   ) {
     this.fetchers = [
       googleGmail,
       googleCalendar,
       googleTasks,
+      githubIssues,
+      notionPages,
+      slackMessages,
       new StubResourceFetcher(IntegrationProvider.microsoft, SyncResource.email),
       new StubResourceFetcher(IntegrationProvider.microsoft, SyncResource.calendar),
-      new StubResourceFetcher(IntegrationProvider.slack, SyncResource.messages),
-      new StubResourceFetcher(IntegrationProvider.github, SyncResource.tasks),
-      new StubResourceFetcher(IntegrationProvider.notion, SyncResource.tasks),
     ];
   }
 

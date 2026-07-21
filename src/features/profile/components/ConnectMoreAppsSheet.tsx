@@ -17,7 +17,10 @@ import type { BackendIntegrationProvider } from '@/config/integrations/providerM
 import { PROFILE_MANAGE_APPS } from '@/features/profile/mapLiveConnectedApps';
 import type { ConnectedApp } from '@/features/profile/types';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { connectIntegration } from '@/services/integrations/connectIntegration';
+import {
+  connectIntegration,
+  reconnectIntegration,
+} from '@/services/integrations/connectIntegration';
 import { fontFamily, radius, spacing, typography } from '@/theme';
 
 type ConnectMoreAppsSheetProps = {
@@ -44,11 +47,25 @@ export function ConnectMoreAppsSheet({
 
   const handleConnect = async (appId: string, provider: BackendIntegrationProvider) => {
     if (connectingId) return;
+    const live = byId.get(appId);
+    if (live?.configured === false) {
+      Alert.alert(
+        'Not available',
+        `${live.name} is not configured on the server yet.`,
+      );
+      return;
+    }
+
     setConnectingId(appId);
     try {
-      const result = await connectIntegration(provider, workspaceId, {
-        next: '/profile',
-      });
+      const result =
+        live?.connected && live.needsReauth && live.connectionId
+          ? await reconnectIntegration(live.connectionId, provider, workspaceId, {
+              next: '/profile',
+            })
+          : await connectIntegration(provider, workspaceId, {
+              next: '/profile',
+            });
       await onConnected();
       if (result.ok) {
         return;
@@ -124,22 +141,27 @@ export function ConnectMoreAppsSheet({
               const live = byId.get(item.id);
               const connected = Boolean(live?.connected);
               const needsReauth = Boolean(live?.needsReauth);
+              const configured = live?.configured !== false;
               const busy = connectingId === item.id;
+              const disabled =
+                busy || (connected && !needsReauth) || (!connected && !configured);
 
               return (
                 <Pressable
                   key={item.id}
                   accessibilityRole="button"
                   accessibilityLabel={
-                    connected
-                      ? needsReauth
-                        ? `Reconnect ${item.name}`
-                        : `${item.name} connected`
-                      : `Connect ${item.name}`
+                    !configured
+                      ? `${item.name} not configured`
+                      : connected
+                        ? needsReauth
+                          ? `Reconnect ${item.name}`
+                          : `${item.name} connected`
+                        : `Connect ${item.name}`
                   }
-                  disabled={busy || (connected && !needsReauth)}
+                  disabled={disabled}
                   onPress={() => {
-                    if (connected && !needsReauth) return;
+                    if (disabled) return;
                     void handleConnect(item.id, item.provider);
                   }}
                   style={({ pressed }) => [
@@ -147,7 +169,7 @@ export function ConnectMoreAppsSheet({
                     {
                       backgroundColor: colors.bgSubtle,
                       borderColor: colors.borderSubtle,
-                      opacity: pressed && !(connected && !needsReauth) ? 0.85 : 1,
+                      opacity: pressed && !disabled ? 0.85 : !configured ? 0.55 : 1,
                     },
                   ]}
                 >
@@ -157,13 +179,15 @@ export function ConnectMoreAppsSheet({
                     <Text style={[styles.rowMeta, { color: colors.textTertiary }]}>
                       {busy
                         ? 'Opening sign-in…'
-                        : connected && needsReauth
-                          ? 'Reconnect required'
-                          : connected
-                            ? live?.accountLabel
-                              ? `Connected · ${live.accountLabel}`
-                              : 'Connected'
-                            : 'Not connected'}
+                        : !configured
+                          ? 'Not configured on server'
+                          : connected && needsReauth
+                            ? 'Reconnect required'
+                            : connected
+                              ? live?.accountLabel
+                                ? `Connected · ${live.accountLabel}`
+                                : 'Connected'
+                              : 'Not connected'}
                     </Text>
                   </View>
                   {busy ? (
@@ -177,11 +201,11 @@ export function ConnectMoreAppsSheet({
                     >
                       <Check size={14} color={colors.success} strokeWidth={2.5} />
                     </View>
-                  ) : (
+                  ) : configured ? (
                     <Text style={[styles.actionLabel, { color: colors.accent }]}>
                       {needsReauth ? 'Reconnect' : 'Connect'}
                     </Text>
-                  )}
+                  ) : null}
                 </Pressable>
               );
             })}
@@ -198,7 +222,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   sheet: {
     maxHeight: '78%',

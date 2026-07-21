@@ -105,6 +105,7 @@ model Workspace {
   calendarEvents    CalendarEvent[]
   emails            Email[]
   contacts          Contact[]
+  providerMessages  ProviderMessage[]
   notifications     Notification[]
   aiConversations   AiConversation[]
   briefs            Brief[]
@@ -174,11 +175,12 @@ model ConnectedAccount {
   workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   oauthToken     OAuthToken?
-  calendarEvents CalendarEvent[]
-  emails         Email[]
-  contacts       Contact[]
-  tasks          Task[]
-  syncStates     SyncState[]
+  calendarEvents   CalendarEvent[]
+  emails           Email[]
+  contacts         Contact[]
+  providerMessages ProviderMessage[]
+  tasks            Task[]
+  syncStates       SyncState[]
 
   @@unique([workspaceId, provider, providerAccountId])
   @@index([workspaceId, provider])
@@ -352,6 +354,36 @@ model Contact {
   @@index([workspaceId, primaryEmail])
   @@index([workspaceId, displayName])
   @@map("contact")
+}
+
+/// Synced chat / channel messages from providers (Slack, etc.).
+/// Distinct from AI conversation `Message` rows.
+model ProviderMessage {
+  id                 String              @id @default(cuid())
+  workspaceId        String
+  connectedAccountId String?
+  provider           IntegrationProvider
+  providerMessageId  String
+  channelId          String?
+  channelName        String?
+  threadId           String?
+  text               String?
+  permalink          String?
+  authorId           String?
+  authorName         String?
+  sentAt             DateTime?
+  raw                Json?
+  syncedAt           DateTime            @default(now())
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectedAccount ConnectedAccount? @relation(fields: [connectedAccountId], references: [id], onDelete: SetNull)
+
+  @@unique([connectedAccountId, providerMessageId])
+  @@index([workspaceId, sentAt])
+  @@index([workspaceId, provider])
+  @@map("provider_message")
 }
 
 enum NotificationChannel {

@@ -289,7 +289,7 @@ export function HomeScreen() {
                   title="No priorities yet"
                   description={
                     env.liveHomeBrief
-                      ? 'Connect Google and wait for sync — or pull to refresh once mail and calendar land.'
+                      ? 'Connect Google, Slack, GitHub, or Notion — then pull to refresh once sync lands.'
                       : 'Your focus list will show up here.'
                   }
                   actionLabel={env.liveHomeBrief ? 'Open Profile' : undefined}

@@ -1,7 +1,10 @@
 import type { PlatformIconId } from '@/components/ui';
 import type { BackendIntegrationProvider } from '@/config/integrations/providerMap';
 import type { ConnectedApp } from '@/features/profile/types';
-import type { IntegrationConnection } from '@/services/repositories/integrationsRepository';
+import type {
+  IntegrationConnection,
+  IntegrationsListResponse,
+} from '@/services/repositories/integrationsRepository';
 
 /** Profile manage grid — only apps with a live OAuth provider. */
 export const PROFILE_MANAGE_APPS: ReadonlyArray<{
@@ -20,6 +23,7 @@ export const PROFILE_MANAGE_APPS: ReadonlyArray<{
 
 export function mapLiveConnectedApps(
   connections: IntegrationConnection[] | undefined,
+  providers?: IntegrationsListResponse['providers'],
 ): ConnectedApp[] {
   const byProvider = new Map<string, IntegrationConnection>();
   for (const connection of connections ?? []) {
@@ -31,8 +35,16 @@ export function mapLiveConnectedApps(
     }
   }
 
+  const configuredByProvider = new Map<string, boolean>();
+  for (const provider of providers ?? []) {
+    configuredByProvider.set(provider.id, provider.configured);
+  }
+
   return PROFILE_MANAGE_APPS.map((app) => {
     const connection = byProvider.get(app.provider);
+    const configured = configuredByProvider.get(app.provider) ?? true;
+    const healthOk = connection?.health?.ok;
+    const healthFailed = healthOk === false;
     return {
       id: app.id,
       platform: app.platform,
@@ -42,6 +54,11 @@ export function mapLiveConnectedApps(
       provider: app.provider,
       needsReauth: connection?.needsReauth ?? false,
       accountLabel: connection?.email ?? connection?.displayName ?? null,
+      configured,
+      healthOk: healthOk ?? null,
+      healthMessage: connection?.health?.message ?? null,
+      // Amber when reauth needed OR last live health check failed.
+      syncWarning: Boolean(connection?.needsReauth || healthFailed),
     };
   });
 }

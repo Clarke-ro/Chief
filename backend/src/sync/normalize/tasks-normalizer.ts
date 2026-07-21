@@ -3,6 +3,7 @@ import {
   TaskSection,
   TaskStatus,
 } from '@prisma/client';
+import { classifyDueForTask } from './tasks-due';
 
 type GoogleTaskPayload = {
   id?: unknown;
@@ -67,7 +68,7 @@ export function normalizeGoogleTask(
 
   const completed = data.status === 'completed';
   const dueAt = parseGoogleDue(data.due);
-  const { section, priority, dueLabel } = classifyDue(dueAt, completed);
+  const { section, priority, dueLabel } = classifyDueForTask(dueAt, completed);
 
   return {
     providerTaskId,
@@ -100,66 +101,6 @@ export function normalizeGoogleTask(
   };
 }
 
-function classifyDue(
-  dueAt: Date | null,
-  completed: boolean,
-): {
-  section: TaskSection;
-  priority: TaskPriority;
-  dueLabel: string | null;
-} {
-  if (completed) {
-    return {
-      section: TaskSection.completed,
-      priority: TaskPriority.low,
-      dueLabel: 'Done',
-    };
-  }
-
-  if (!dueAt) {
-    return {
-      section: TaskSection.today,
-      priority: TaskPriority.medium,
-      dueLabel: 'No due date',
-    };
-  }
-
-  const endOfToday = endOfUtcDay(new Date());
-  const startOfToday = startOfUtcDay(new Date());
-
-  if (dueAt.getTime() < startOfToday.getTime()) {
-    return {
-      section: TaskSection.today,
-      priority: TaskPriority.high,
-      dueLabel: 'Overdue',
-    };
-  }
-
-  if (dueAt.getTime() <= endOfToday.getTime()) {
-    return {
-      section: TaskSection.today,
-      priority: TaskPriority.high,
-      dueLabel: 'Due today',
-    };
-  }
-
-  const inThreeDays = new Date(startOfToday);
-  inThreeDays.setUTCDate(inThreeDays.getUTCDate() + 3);
-  if (dueAt.getTime() <= inThreeDays.getTime()) {
-    return {
-      section: TaskSection.today,
-      priority: TaskPriority.medium,
-      dueLabel: formatDueLabel(dueAt),
-    };
-  }
-
-  return {
-    section: TaskSection.upcoming,
-    priority: TaskPriority.low,
-    dueLabel: formatDueLabel(dueAt),
-  };
-}
-
 function parseGoogleDue(value: unknown): Date | null {
   if (typeof value !== 'string' || !value) return null;
   // Google often returns date-only as midnight UTC.
@@ -171,32 +112,4 @@ function parseDate(value: unknown): Date | null {
   if (typeof value !== 'string' || !value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function startOfUtcDay(date: Date): Date {
-  return new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-  );
-}
-
-function endOfUtcDay(date: Date): Date {
-  return new Date(
-    Date.UTC(
-      date.getUTCFullYear(),
-      date.getUTCMonth(),
-      date.getUTCDate(),
-      23,
-      59,
-      59,
-      999,
-    ),
-  );
-}
-
-function formatDueLabel(dueAt: Date): string {
-  return dueAt.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  });
 }

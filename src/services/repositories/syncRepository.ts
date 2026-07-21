@@ -1,13 +1,13 @@
 import { apiJson } from '@/services/api/client';
 
-type SyncStateRow = {
+export type SyncStateRow = {
   resource: string;
   status: string;
   lastSyncedAt: string | null;
   lastError: string | null;
 };
 
-type SyncStatusResponse = {
+export type SyncStatusResponse = {
   connectedAccountId: string;
   provider: string;
   states: SyncStateRow[];
@@ -35,18 +35,40 @@ export const syncRepository = {
     );
   },
 
-  /** Kick sync for the first active Google (or any) connection. */
-  async runFirstConnection(workspaceId: string): Promise<boolean> {
+  /**
+   * Kick sync for every active connection (Google + Slack/GitHub/Notion).
+   * Returns how many accounts were triggered.
+   */
+  async runAllConnections(workspaceId: string): Promise<number> {
     const { integrationsRepository } = await import(
       '@/services/repositories/integrationsRepository'
     );
     const list = await integrationsRepository.list(workspaceId);
-    const account =
-      list.connections.find((c) => c.provider === 'google' && c.status !== 'revoked') ??
-      list.connections.find((c) => c.status !== 'revoked');
-    if (!account) return false;
-    await syncRepository.run(account.id, workspaceId);
-    return true;
+    const accounts = list.connections.filter((c) => c.status !== 'revoked');
+    if (accounts.length === 0) return 0;
+
+    // Prefer Google first so Home brief fills quickly, then other providers.
+    const ordered = [
+      ...accounts.filter((c) => c.provider === 'google'),
+      ...accounts.filter((c) => c.provider !== 'google'),
+    ];
+
+    let triggered = 0;
+    for (const account of ordered) {
+      try {
+        await syncRepository.run(account.id, workspaceId);
+        triggered += 1;
+      } catch {
+        // Continue other providers — one failure shouldn't block the rest.
+      }
+    }
+    return triggered;
+  },
+
+  /** Kick sync for the first active Google (or any) connection. */
+  async runFirstConnection(workspaceId: string): Promise<boolean> {
+    const count = await syncRepository.runAllConnections(workspaceId);
+    return count > 0;
   },
 
   /**
@@ -69,7 +91,7 @@ export const syncRepository = {
     if (!account) return { ready: false, accountId: null };
 
     try {
-      await syncRepository.run(account.id, workspaceId);
+      await syncRepository.runAllConnections(workspaceId);
     } catch {
       // Still poll — OAuth onboarding sync may already be running.
     }

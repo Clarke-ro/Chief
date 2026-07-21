@@ -1,7 +1,7 @@
 ﻿import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check } from 'lucide-react-native';
+import { Check, PlugZap } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppHeader } from '@/components/ui';
+import { AppHeader, EmptyState } from '@/components/ui';
 import type { BackendIntegrationProvider } from '@/config/integrations/providerMap';
 import { dispatchAction } from '@/features/actions';
 import { ConnectMoreAppsSheet } from '@/features/profile/components/ConnectMoreAppsSheet';
@@ -23,15 +23,20 @@ import { ProfileSectionLabel } from '@/features/profile/components/ProfileSectio
 import { SettingRow } from '@/features/profile/components/SettingRow';
 import { SettingsGroup } from '@/features/profile/components/SettingsGroup';
 import { SubscriptionBanner } from '@/features/profile/components/SubscriptionBanner';
+import { SyncHealthCard } from '@/features/profile/components/SyncHealthCard';
 import { mapLiveConnectedApps } from '@/features/profile/mapLiveConnectedApps';
 import type { ConnectedApp } from '@/features/profile/types';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { ensureActiveWorkspaceId } from '@/services/activeWorkspace';
 import { confirmAction, notifyAlert } from '@/services/confirm';
-import { connectIntegration } from '@/services/integrations/connectIntegration';
+import {
+  connectIntegration,
+  reconnectIntegration,
+} from '@/services/integrations/connectIntegration';
 import { clearUserSession, queryKeys, workspaceNav } from '@/services';
 import { briefRepository } from '@/services/repositories/briefRepository';
 import { integrationsRepository } from '@/services/repositories/integrationsRepository';
+import { syncRepository } from '@/services/repositories/syncRepository';
 import { usePreferencesStore, useWorkspaceStore, type ThemePreference } from '@/stores';
 import { spacing, typography } from '@/theme';
 
@@ -79,8 +84,12 @@ export function ProfileScreen() {
   });
 
   const connectedApps = useMemo(
-    () => mapLiveConnectedApps(integrationsQuery.data?.connections),
-    [integrationsQuery.data?.connections],
+    () =>
+      mapLiveConnectedApps(
+        integrationsQuery.data?.connections,
+        integrationsQuery.data?.providers,
+      ),
+    [integrationsQuery.data?.connections, integrationsQuery.data?.providers],
   );
 
   const toggleNotification = useCallback(
@@ -105,17 +114,64 @@ export function ProfileScreen() {
 
   const runConnect = useCallback(
     async (provider: BackendIntegrationProvider, appId: string) => {
+      const app = connectedApps.find((a) => a.id === appId);
+      if (app?.configured === false) {
+        notifyAlert(
+          'Not available',
+          `${app.name} is not configured on the server yet.`,
+        );
+        return;
+      }
       setBusyAppId(appId);
       try {
         const result = await connectIntegration(provider, workspaceId, {
           next: '/profile',
         });
         await invalidateIntegrations();
-        if (!result.ok && result.reason === 'failed' && result.message) {
+        if (result.ok) {
+          if (workspaceId) {
+            void syncRepository.runFirstConnection(workspaceId).catch(() => {});
+          }
+        } else if (result.reason === 'failed' && result.message) {
           notifyAlert('Connect failed', result.message);
         }
       } catch {
         notifyAlert('Connect failed', 'Could not start OAuth. Check your connection and try again.');
+      } finally {
+        setBusyAppId(null);
+      }
+    },
+    [connectedApps, invalidateIntegrations, workspaceId],
+  );
+
+  const runReconnect = useCallback(
+    async (app: ConnectedApp) => {
+      const provider = app.provider as BackendIntegrationProvider | undefined;
+      if (!provider || !app.connectionId) {
+        notifyAlert('Reconnect failed', 'No live connection id for this app.');
+        return;
+      }
+      setBusyAppId(app.id);
+      try {
+        const result = await reconnectIntegration(
+          app.connectionId,
+          provider,
+          workspaceId,
+          { next: '/profile' },
+        );
+        await invalidateIntegrations();
+        if (result.ok) {
+          if (workspaceId) {
+            void syncRepository.runFirstConnection(workspaceId).catch(() => {});
+          }
+        } else if (result.reason === 'failed' && result.message) {
+          notifyAlert('Reconnect failed', result.message);
+        }
+      } catch {
+        notifyAlert(
+          'Reconnect failed',
+          'Could not start OAuth. Check your connection and try again.',
+        );
       } finally {
         setBusyAppId(null);
       }
@@ -161,7 +217,7 @@ export function ProfileScreen() {
             : 'This connection expired. Sign in again to keep using it.',
           confirmLabel: 'Reconnect',
         });
-        if (ok) void runConnect(provider, app.id);
+        if (ok) void runReconnect(app);
         return;
       }
 
@@ -184,6 +240,14 @@ export function ProfileScreen() {
         return;
       }
 
+      if (app.configured === false) {
+        notifyAlert(
+          'Not available',
+          `${app.name} is not configured on the server yet.`,
+        );
+        return;
+      }
+
       const ok = await confirmAction({
         title: `Connect ${app.name}?`,
         message: 'Chief will open a secure sign-in in your browser.',
@@ -191,7 +255,7 @@ export function ProfileScreen() {
       });
       if (ok) void runConnect(provider, app.id);
     },
-    [busyAppId, runConnect, runDisconnect],
+    [busyAppId, runConnect, runDisconnect, runReconnect],
   );
 
   const handleLogOut = useCallback(async () => {
@@ -234,6 +298,22 @@ export function ProfileScreen() {
 
   const bottomPad = insets.bottom + (Platform.OS === 'ios' ? 88 : 24);
   const appsLoading = workspaceQuery.isLoading || integrationsQuery.isLoading;
+  const appsError = integrationsQuery.isError;
+  const anyConnected = connectedApps.some((a) => a.connected);
+
+  const handleRetrySync = useCallback(() => {
+    if (!workspaceId) return;
+    void syncRepository
+      .runAllConnections(workspaceId)
+      .then(() => {
+        void queryClient.invalidateQueries({
+          queryKey: [...queryKeys.root, 'syncHealth'],
+        });
+      })
+      .catch(() => {
+        notifyAlert('Sync failed', 'Could not start sync. Try again in a moment.');
+      });
+  }, [queryClient, workspaceId]);
 
   return (
     <View
@@ -270,12 +350,39 @@ export function ProfileScreen() {
                 <View style={styles.appsLoading}>
                   <ActivityIndicator color={colors.accent} />
                 </View>
-              ) : (
-                <ConnectedAppsGrid
-                  apps={connectedApps}
-                  onAppPress={handleAppPress}
-                  onConnectMore={() => setConnectSheetOpen(true)}
+              ) : appsError ? (
+                <EmptyState
+                  icon={PlugZap}
+                  title="Couldn't load apps"
+                  description="Check your connection and try again."
+                  actionLabel="Retry"
+                  onAction={() => {
+                    void integrationsQuery.refetch();
+                  }}
                 />
+              ) : (
+                <>
+                  <ConnectedAppsGrid
+                    apps={connectedApps}
+                    onAppPress={handleAppPress}
+                    onConnectMore={() => setConnectSheetOpen(true)}
+                  />
+                  {!anyConnected ? (
+                    <Text style={[styles.emptyHint, { color: colors.textSecondary }]}>
+                      No apps connected yet. Tap Add to connect Gmail, Slack, GitHub, or Notion.
+                    </Text>
+                  ) : null}
+                  <View style={styles.healthWrap}>
+                    <SyncHealthCard
+                      workspaceId={workspaceId}
+                      apps={connectedApps}
+                      onReconnect={(app) => {
+                        void runReconnect(app);
+                      }}
+                      onRetrySync={handleRetrySync}
+                    />
+                  </View>
+                </>
               )}
               {busyAppId ? (
                 <View style={styles.busyRow}>
@@ -480,6 +587,16 @@ const styles = StyleSheet.create({
     minHeight: 120,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  emptyHint: {
+    ...typography.caption,
+    textAlign: 'center',
+    marginTop: spacing[12],
+    lineHeight: 18,
+    paddingHorizontal: spacing[8],
+  },
+  healthWrap: {
+    marginTop: spacing[12],
   },
   busyRow: {
     flexDirection: 'row',

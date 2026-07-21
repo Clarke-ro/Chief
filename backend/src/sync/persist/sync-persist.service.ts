@@ -1,9 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { SyncResource, type Prisma } from '@prisma/client';
+import { IntegrationProvider, SyncResource, type Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { normalizeGoogleCalendarEvent } from '../normalize/calendar-normalizer';
+import { normalizeGitHubIssue } from '../normalize/github-issues-normalizer';
 import { normalizeGmailMessage } from '../normalize/gmail-normalizer';
-import { normalizeGoogleTask } from '../normalize/tasks-normalizer';
+import { normalizeNotionPage } from '../normalize/notion-pages-normalizer';
+import { normalizeSlackMessage } from '../normalize/slack-messages-normalizer';
+import {
+  normalizeGoogleTask,
+  type NormalizedTask,
+} from '../normalize/tasks-normalizer';
 import type { RawSyncBatch } from '../sync.types';
 
 /**
@@ -42,6 +48,9 @@ export class SyncPersistService {
         break;
       case SyncResource.tasks:
         persisted = await this.persistTasks(batch);
+        break;
+      case SyncResource.messages:
+        persisted = await this.persistMessages(batch);
         break;
       default:
         this.logger.debug(
@@ -201,7 +210,7 @@ export class SyncPersistService {
   private async persistTasks(batch: RawSyncBatch): Promise<number> {
     let count = 0;
     for (const item of batch.items) {
-      const normalized = normalizeGoogleTask(item.payload, item.providerItemId);
+      const normalized = this.normalizeTaskItem(batch.provider, item.payload, item.providerItemId);
       if (!normalized) continue;
       if (!batch.connectedAccountId) continue;
 
@@ -247,6 +256,74 @@ export class SyncPersistService {
           completedAt: normalized.completedAt,
           meta: normalized.meta as Prisma.InputJsonValue,
           updatedAt: now,
+        },
+      });
+      count += 1;
+    }
+    return count;
+  }
+
+  private normalizeTaskItem(
+    provider: IntegrationProvider,
+    payload: Record<string, unknown>,
+    providerItemId?: string,
+  ): NormalizedTask | null {
+    switch (provider) {
+      case IntegrationProvider.github:
+        return normalizeGitHubIssue(payload, providerItemId);
+      case IntegrationProvider.notion:
+        return normalizeNotionPage(payload, providerItemId);
+      case IntegrationProvider.google:
+      default:
+        return normalizeGoogleTask(payload, providerItemId);
+    }
+  }
+
+  private async persistMessages(batch: RawSyncBatch): Promise<number> {
+    let count = 0;
+    for (const item of batch.items) {
+      const normalized =
+        batch.provider === IntegrationProvider.slack
+          ? normalizeSlackMessage(item.payload, item.providerItemId)
+          : null;
+      if (!normalized) continue;
+      if (!batch.connectedAccountId) continue;
+
+      const now = new Date();
+      await this.prisma.providerMessage.upsert({
+        where: {
+          connectedAccountId_providerMessageId: {
+            connectedAccountId: batch.connectedAccountId,
+            providerMessageId: normalized.providerMessageId,
+          },
+        },
+        create: {
+          workspaceId: batch.workspaceId,
+          connectedAccountId: batch.connectedAccountId,
+          provider: batch.provider,
+          providerMessageId: normalized.providerMessageId,
+          channelId: normalized.channelId,
+          channelName: normalized.channelName,
+          threadId: normalized.threadId,
+          text: normalized.text,
+          permalink: normalized.permalink,
+          authorId: normalized.authorId,
+          authorName: normalized.authorName,
+          sentAt: normalized.sentAt,
+          raw: normalized.raw as Prisma.InputJsonValue,
+          syncedAt: now,
+        },
+        update: {
+          channelId: normalized.channelId,
+          channelName: normalized.channelName,
+          threadId: normalized.threadId,
+          text: normalized.text,
+          permalink: normalized.permalink,
+          authorId: normalized.authorId,
+          authorName: normalized.authorName,
+          sentAt: normalized.sentAt,
+          raw: normalized.raw as Prisma.InputJsonValue,
+          syncedAt: now,
         },
       });
       count += 1;

@@ -12,6 +12,11 @@ export type IntegrationConnection = {
   scopes: string[];
   needsReauth: boolean;
   connectedAt: string;
+  health?: {
+    lastCheckedAt: string | null;
+    ok: boolean | null;
+    message: string | null;
+  };
 };
 
 export type IntegrationsListResponse = {

@@ -33,7 +33,7 @@ export function ConnectedAppsGrid({ apps, onAppPress, onConnectMore }: Connected
                 style={[
                   styles.dot,
                   {
-                    backgroundColor: app.needsReauth
+                    backgroundColor: app.syncWarning || app.needsReauth
                       ? colors.warning
                       : app.connected
                         ? colors.success
@@ -71,7 +71,7 @@ export function ConnectedAppsGrid({ apps, onAppPress, onConnectMore }: Connected
       </View>
 
       <Text style={[styles.hint, { color: colors.textTertiary }]}>
-        Green is connected. Amber needs reconnect. Tap an app to manage it.
+        Green is healthy. Amber needs reconnect or failed a health check. Tap an app to manage it.
       </Text>
     </GroupedCard>
   );

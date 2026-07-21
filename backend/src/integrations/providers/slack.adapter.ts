@@ -12,7 +12,7 @@ import type {
   ProviderHealthResult,
 } from './provider.types';
 
-/** User-token scopes for reading workspace activity (no sync yet). */
+/** User-token scopes for reading workspace activity. */
 const USER_SCOPES = [
   'channels:read',
   'groups:read',
