@@ -12,7 +12,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#6D19B7",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -26,7 +26,7 @@
       "name": "Chief",
       "shortName": "Chief",
       "description": "Your AI chief of staff for real work — priorities, daily brief, and next actions.",
-      "themeColor": "#5B6CFF",
+      "themeColor": "#6D19B7",
       "backgroundColor": "#F7F7F8"
     },
     "plugins": [

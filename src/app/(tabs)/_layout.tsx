@@ -1,9 +1,10 @@
 import { BlurView } from 'expo-blur';
 import { Redirect, Tabs } from 'expo-router';
-import { CalendarDays, ChartNoAxesCombined, Home, Sparkles, User } from 'lucide-react-native';
+import { CalendarDays, ChartNoAxesCombined, Home, User } from 'lucide-react-native';
 import { memo, useEffect } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, View, type ColorValue } from 'react-native';
 
+import { ChiefLogo } from '@/features/chief/components/ChiefLogo';
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { ensureSessionBoot, useSessionBootStore } from '@/stores';
@@ -17,7 +18,7 @@ const TodayIcon = memo(function TodayIcon({ color, size }: TabIconProps) {
   return <CalendarDays color={color as string} size={size} strokeWidth={2} />;
 });
 const ChiefIcon = memo(function ChiefIcon({ color, size }: TabIconProps) {
-  return <Sparkles color={color as string} size={size} strokeWidth={2} />;
+  return <ChiefLogo size={size} tintColor={color} />;
 });
 const AnalyticsIcon = memo(function AnalyticsIcon({ color, size }: TabIconProps) {
   return <ChartNoAxesCombined color={color as string} size={size} strokeWidth={2} />;
