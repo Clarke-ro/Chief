@@ -53,6 +53,13 @@ export const envSchema = z.object({
   NOTION_CLIENT_ID: z.string().optional().default(''),
   NOTION_CLIENT_SECRET: z.string().optional().default(''),
 
+  /** OpenAI (or compatible) key — server-side only. Empty disables live Chief chat. */
+  OPENAI_API_KEY: z.string().optional().default(''),
+  /** Which model stack Chief uses: openai | mock */
+  AI_PROVIDER: z.enum(['openai', 'mock']).optional().default('openai'),
+  /** Responses API model id (e.g. gpt-5.6, gpt-4.1-mini). */
+  AI_MODEL: z.string().optional().default('gpt-5.6'),
+
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
     .default('info'),

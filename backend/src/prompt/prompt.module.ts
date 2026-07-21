@@ -1,5 +1,8 @@
 ﻿import { Module } from '@nestjs/common';
+import { PromptService } from './prompt.service';
 
-/** Domain shell — implement in a later phase. */
-@Module({})
+@Module({
+  providers: [PromptService],
+  exports: [PromptService],
+})
 export class PromptModule {}

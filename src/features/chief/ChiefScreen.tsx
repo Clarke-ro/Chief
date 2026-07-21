@@ -25,45 +25,19 @@ import { ConversationThread } from '@/features/chief/components/ConversationThre
 import { HistoryDrawer } from '@/features/chief/components/HistoryDrawer';
 import type { ConversationTurn } from '@/features/chief/types';
 import { useThemeColors } from '@/hooks/useThemeColors';
+import { ApiError, ApiNetworkError } from '@/services/api/client';
+import { chiefChatRepository } from '@/services/repositories/chiefChatRepository';
 import { useWorkspaceStore } from '@/stores';
 import { spacing } from '@/theme';
 
 const WIDE_BREAKPOINT = 768;
 
-function mockChiefReply(prompt: string): ConversationTurn {
+function offlineChiefReply(prompt: string): ConversationTurn {
   const clipped = `${prompt.slice(0, 72)}${prompt.length > 72 ? '…' : ''}`;
-  const lower = prompt.toLowerCase();
-
-  const actionable =
-    /\b(draft|open|merge|reschedule|notify|ping|send|schedule|fix|review|prepare|reply|email|pr|slack|meeting)\b/.test(
-      lower,
-    );
-
-  const content = `I've lined "${clipped}" up against your calendar, open threads, and active blockers. Act on the highest-leverage item first — I'll reshape the rest of your day around it.`;
-
-  if (!actionable) {
-    return {
-      id: `c-${Date.now() + 1}`,
-      role: 'chief',
-      content,
-    };
-  }
-
-  const actionsLead = /\b(what|which|how)\b/.test(lower)
-    ? 'What would you like to do next?'
-    : 'Next steps';
-
   return {
     id: `c-${Date.now() + 1}`,
     role: 'chief',
-    content,
-    actionsLead,
-    actions: [
-      { id: 'open', label: 'Open GitHub' },
-      { id: 'draft', label: 'Draft update' },
-      { id: 'schedule', label: 'Adjust schedule' },
-    ],
-    context: ['github', 'calendar', 'slack', 'notion'],
+    content: `I couldn't reach the live workspace model for "${clipped}". Check your connection and try again — Chief answers from your synced brief, not a canned script.`,
   };
 }
 
@@ -138,9 +112,54 @@ export function ChiefScreen() {
         role: 'user',
         content: text,
       };
-      appendTurns(userTurn, mockChiefReply(text), text);
+
+      const state = useWorkspaceStore.getState();
+      const history =
+        state.sessions.find((session) => session.id === state.activeSessionId)?.turns ?? [];
+      const focusId =
+        typeof params.focusId === 'string' && params.focusId.trim()
+          ? params.focusId.trim()
+          : undefined;
+
+      void (async () => {
+        if (!chiefChatRepository.shouldUseLiveChat()) {
+          appendTurns(userTurn, offlineChiefReply(text), text);
+          return;
+        }
+
+        try {
+          const live = await chiefChatRepository.send(text, {
+            history,
+            focusId,
+          });
+          const chiefTurn: ConversationTurn = {
+            id: `c-${Date.now() + 1}`,
+            role: 'chief',
+            content: live.content.trim() || 'I need a bit more context to help with that.',
+          };
+          appendTurns(userTurn, chiefTurn, text);
+        } catch (error) {
+          const detail =
+            error instanceof ApiError
+              ? error.status === 503
+                ? 'Chief chat is not configured on the server yet.'
+                : `Request failed (${error.status}).`
+              : error instanceof ApiNetworkError
+                ? error.message
+                : 'Something went wrong.';
+          appendTurns(
+            userTurn,
+            {
+              id: `c-${Date.now() + 1}`,
+              role: 'chief',
+              content: `${detail} I couldn't use your live workspace context for this reply.`,
+            },
+            text,
+          );
+        }
+      })();
     },
-    [appendTurns],
+    [appendTurns, params.focusId],
   );
 
   /** Actionable → user bubble + intro + editable canvas; related chips (not Open Gmail) */

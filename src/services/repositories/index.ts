@@ -4,6 +4,7 @@ export { taskRepository } from './taskRepository';
 export { profileRepository } from './profileRepository';
 export { analyticsRepository } from './analyticsRepository';
 export { chiefRepository } from './chiefRepository';
+export { chiefChatRepository } from './chiefChatRepository';
 export { onboardingRepository } from './onboardingRepository';
 export { integrationsRepository } from './integrationsRepository';
 export { syncRepository } from './syncRepository';

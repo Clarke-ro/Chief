@@ -31,6 +31,11 @@ export type AppConfig = {
     github: OAuthProviderCredentials;
     notion: OAuthProviderCredentials;
   };
+  ai: {
+    provider: 'openai' | 'mock';
+    apiKey: string;
+    model: string;
+  };
   logLevel: Env['LOG_LEVEL'];
   swaggerEnabled: boolean;
 };
@@ -82,6 +87,11 @@ export function buildConfiguration(env: Env): AppConfig {
         clientId: env.NOTION_CLIENT_ID,
         clientSecret: env.NOTION_CLIENT_SECRET,
       },
+    },
+    ai: {
+      provider: env.OPENAI_API_KEY ? env.AI_PROVIDER : 'mock',
+      apiKey: env.OPENAI_API_KEY,
+      model: env.AI_MODEL || 'gpt-5.6',
     },
     logLevel: env.LOG_LEVEL,
     swaggerEnabled:

@@ -1,5 +1,8 @@
 ﻿import { Module } from '@nestjs/common';
+import { OpenAiService } from './openai.service';
 
-/** Domain shell — implement in a later phase. */
-@Module({})
+@Module({
+  providers: [OpenAiService],
+  exports: [OpenAiService],
+})
 export class AiModule {}

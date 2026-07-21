@@ -60,6 +60,10 @@ export class AppConfigService {
     return this.oauth[provider];
   }
 
+  get ai(): AppConfig['ai'] {
+    return this.config.get('ai', { infer: true });
+  }
+
   get logLevel(): AppConfig['logLevel'] {
     return this.config.get('logLevel', { infer: true });
   }
