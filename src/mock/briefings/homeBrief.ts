@@ -9,9 +9,8 @@ export const homeBrief: HomeBrief = {
     {
       id: 'f1',
       platform: 'github',
-      title: 'Review and merge PR #182 so payment flow can deploy today',
-      reason:
-        'Blocks deployment of the payment flow. Three teammates are waiting — staging is green and only your merge remains. Est. 12 min',
+      title: 'Review and merge PR #182',
+      reason: 'Blocks payment-flow deploy · Est. 12 min',
       estimatedTime: '12 min',
       priority: 'high',
       confidence: 0.96,
@@ -30,9 +29,8 @@ export const homeBrief: HomeBrief = {
     {
       id: 'f2',
       platform: 'gmail',
-      title: 'Reply to the investor email today while the draft still has momentum',
-      reason:
-        'A same-day reply keeps the conversation warm. Your draft already covers runway, hiring, and the next demo. Est. 15 min',
+      title: 'Reply to the investor email today',
+      reason: 'Same-day reply keeps momentum · Est. 15 min',
       estimatedTime: '15 min',
       priority: 'high',
       confidence: 0.9,
@@ -96,7 +94,7 @@ export const homeBrief: HomeBrief = {
       section: 'Projects',
       title: 'Merge PR #182 so payment-flow deployment can ship today',
       summary:
-        'Three teammates already approved. Staging is green — your merge is the remaining blocker before the customer demo.',
+        '• Three teammates already approved\n• Staging is green — merge is the remaining blocker\n• Customer demo depends on this release',
       timestamp: '12m ago',
     },
     {
@@ -105,7 +103,7 @@ export const homeBrief: HomeBrief = {
       section: 'Projects',
       title: 'Check the CI flake on main before it hides a real auth regression',
       summary:
-        'Nightly auth tests failed once, then passed on retry. Confirm whether this needs a pin or quarantine.',
+        '• Nightly auth tests failed once, then passed on retry\n• Confirm whether this needs a pin or quarantine',
       timestamp: '40m ago',
     },
     {
@@ -114,7 +112,7 @@ export const homeBrief: HomeBrief = {
       section: 'Needs Attention',
       title: 'Approve the campaign copy so marketing can publish on schedule',
       summary:
-        'Sarah is blocked in #marketing until you sign off. A quick yes/no with edits unblocks the launch thread.',
+        '• Sarah is blocked in #marketing until you sign off\n• A quick yes/no with edits unblocks launch',
       timestamp: '25m ago',
     },
     {
@@ -123,7 +121,7 @@ export const homeBrief: HomeBrief = {
       section: 'Needs Attention',
       title: 'Decide empty-state direction so engineering can finish the polish pass',
       summary:
-        'Maya needs illustration-led vs copy-first. Your call unblocks tonight’s staging cut.',
+        '• Maya needs illustration-led vs copy-first\n• Your call unblocks tonight’s staging cut',
       timestamp: '50m ago',
     },
     {
@@ -132,7 +130,7 @@ export const homeBrief: HomeBrief = {
       section: 'Meetings',
       title: 'Prepare for the 1:00 PM design review with clear asks',
       summary:
-        'Four attendees are on the invite. Skim the latest frames and list two decisions you need from the room.',
+        '• Four attendees are on the invite\n• Skim latest frames\n• List two decisions you need from the room',
       timestamp: '30m ago',
     },
     {
@@ -141,7 +139,7 @@ export const homeBrief: HomeBrief = {
       section: 'Projects',
       title: 'Review the two new Launch tasks assigned to you on the Q3 Roadmap',
       summary:
-        'Confirm owners, due dates, and whether either belongs on today’s Top Priorities.',
+        '• Confirm owners and due dates\n• Decide whether either belongs on today’s Top Priorities',
       timestamp: '45m ago',
     },
   ],

@@ -27,6 +27,7 @@ import {
   scoreEmail,
   scoreTask,
   synthesizeWorkCopy,
+  summarizeBodyAsBriefList,
   type BriefSection,
   type WorkKind,
 } from './relevance.scorer';
@@ -438,7 +439,7 @@ export class BriefingService {
     return {
       id: task.id,
       platform,
-      title: synthesized.headline,
+      title: shortFocusTitle(synthesized.headline),
       reason: buildActionReason({
         workKind: synthesized.workKind,
         title: task.title,
@@ -497,7 +498,7 @@ export class BriefingService {
     return {
       id: `mail-${email.id}`,
       platform: mapPlatform('gmail', email.provider, 'gmail'),
-      title: synthesized.headline,
+      title: shortFocusTitle(synthesized.headline),
       reason: buildActionReason({
         workKind: synthesized.workKind,
         title: subject,
@@ -543,7 +544,7 @@ export class BriefingService {
     return {
       id: `event-${event.id}`,
       platform: mapPlatform('calendar', event.provider, 'calendar'),
-      title: synthesized.headline,
+      title: shortFocusTitle(synthesized.headline),
       reason: buildActionReason({
         workKind: synthesized.workKind,
         title: event.title,
@@ -592,7 +593,11 @@ export class BriefingService {
       platform: mapPlatform('gmail', email.provider, 'gmail'),
       section: briefSectionFor(synthesized.workKind),
       title: synthesized.headline,
-      summary: synthesized.detail,
+      summary: summarizeBodyAsBriefList(
+        email.bodyText,
+        email.snippet,
+        synthesized.detail,
+      ),
       timestamp: formatRelative(email.receivedAt),
     };
   }
@@ -623,7 +628,11 @@ export class BriefingService {
       platform: mapPlatform('calendar', event.provider, 'calendar'),
       section: briefSectionFor(synthesized.workKind),
       title: synthesized.headline,
-      summary: synthesized.detail || `Starts ${time}`,
+      summary: summarizeBodyAsBriefList(
+        event.description,
+        event.location,
+        synthesized.detail || `Starts ${time}`,
+      ),
       timestamp: time,
     };
   }
@@ -690,7 +699,21 @@ function needsPresentationRefresh(brief: HomeBriefDto): boolean {
   if (brief.briefing.some((signal) => /^Respond to /i.test(signal.title))) {
     return true;
   }
+  // Older briefs used a single paragraph summary instead of list blocks.
+  if (
+    brief.briefing.some(
+      (signal) => signal.summary.length > 0 && !signal.summary.includes('•'),
+    )
+  ) {
+    return true;
+  }
   return false;
+}
+
+function shortFocusTitle(headline: string): string {
+  const trimmed = headline.trim();
+  if (trimmed.length <= 72) return trimmed;
+  return `${trimmed.slice(0, 71)}…`;
 }
 
 function firstName(name?: string | null): string {

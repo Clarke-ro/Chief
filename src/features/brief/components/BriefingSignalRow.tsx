@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight } from 'lucide-react-native';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PlatformLogo } from '@/components/ui/PlatformLogo';
@@ -12,10 +12,18 @@ type BriefingSignalRowProps = {
   onPress?: () => void;
 };
 
-/** One update block along a Brief section thread rail — tap to expand/collapse. */
+function splitBriefLines(summary: string): string[] {
+  return summary
+    .split(/\n+/)
+    .map((line) => line.replace(/^[•\-\u2022]\s*/, '').trim())
+    .filter(Boolean);
+}
+
+/** Brief thread row — tap expands a short list-style body summary. */
 export function BriefingSignalRow({ item, onPress }: BriefingSignalRowProps) {
   const colors = useThemeColors();
   const [expanded, setExpanded] = useState(false);
+  const lines = useMemo(() => splitBriefLines(item.summary), [item.summary]);
 
   const toggle = () => {
     setExpanded((prev) => !prev);
@@ -45,12 +53,20 @@ export function BriefingSignalRow({ item, onPress }: BriefingSignalRowProps) {
         )}
       </View>
 
-      <Text
-        style={[styles.detail, { color: colors.textSecondary }]}
-        numberOfLines={expanded ? undefined : 2}
-      >
-        {item.summary}
-      </Text>
+      {expanded ? (
+        <View style={styles.list}>
+          {lines.map((line, index) => (
+            <View key={`${index}-${line.slice(0, 12)}`} style={styles.listRow}>
+              <Text style={[styles.bullet, { color: colors.textSecondary }]}>•</Text>
+              <Text style={[styles.listText, { color: colors.textSecondary }]}>{line}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text style={[styles.preview, { color: colors.textSecondary }]} numberOfLines={2}>
+          {lines[0] ?? item.summary}
+        </Text>
+      )}
 
       <Text style={[styles.timestamp, { color: colors.textTertiary }]}>{item.timestamp}</Text>
     </Pressable>
@@ -75,10 +91,30 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  detail: {
+  preview: {
     ...typography.caption,
     lineHeight: 18,
     paddingLeft: 22 + spacing[8],
+  },
+  list: {
+    gap: spacing[8],
+    paddingLeft: 22 + spacing[8],
+  },
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[8],
+  },
+  bullet: {
+    ...typography.caption,
+    lineHeight: 18,
+    width: 10,
+  },
+  listText: {
+    ...typography.caption,
+    lineHeight: 18,
+    flex: 1,
+    minWidth: 0,
   },
   timestamp: {
     ...typography.caption,

@@ -79,27 +79,6 @@ function fallbackSection(platform: PlatformId): string {
   }
 }
 
-/** Focus headline — tap expands/collapses long synthesized copy. */
-function ExpandableFocusTitle({ title, color }: { title: string; color: string }) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ expanded }}
-      accessibilityLabel={`${title}. ${expanded ? 'Collapse' : 'Expand'}`}
-      onPress={(e) => {
-        e?.stopPropagation?.();
-        setExpanded((prev) => !prev);
-      }}
-      style={styles.focusTitlePress}
-    >
-      <Text style={[styles.focusTitle, { color }]} numberOfLines={expanded ? undefined : 2}>
-        {title}
-      </Text>
-    </Pressable>
-  );
-}
-
 /** Home — AI briefing: "What should I do today?" */
 export function HomeScreen() {
   const colors = useThemeColors();
@@ -338,50 +317,47 @@ export function HomeScreen() {
                         {index + 1}
                       </Text>
                       <View style={styles.focusCard}>
-                        <View style={styles.focusHeader}>
-                          <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={`Open details for ${item.title}`}
-                            onPress={() => openFocus(item.id)}
-                            hitSlop={8}
-                          >
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open details for ${item.title}`}
+                          onPress={() => openFocus(item.id)}
+                        >
+                          <View style={styles.focusHeader}>
                             <PlatformLogo platform={item.platform} size={26} />
-                          </Pressable>
-                          <View style={styles.focusCopy}>
-                            <View style={styles.focusMeta}>
-                              <Text
-                                style={[styles.focusApp, { color: colors.textSecondary }]}
-                                numberOfLines={1}
-                              >
-                                {item.urgencyLabel}
-                              </Text>
-                              <View style={styles.focusMetaTrailing}>
-                                <PriorityBadge priority={item.priority} size="sm" />
+                            <View style={styles.focusCopy}>
+                              <View style={styles.focusMeta}>
                                 <Text
-                                  style={[styles.focusTime, { color: colors.textTertiary }]}
+                                  style={[styles.focusApp, { color: colors.textSecondary }]}
                                   numberOfLines={1}
                                 >
-                                  {item.estimatedTime}
+                                  {item.urgencyLabel}
                                 </Text>
+                                <View style={styles.focusMetaTrailing}>
+                                  <PriorityBadge priority={item.priority} size="sm" />
+                                  <Text
+                                    style={[styles.focusTime, { color: colors.textTertiary }]}
+                                    numberOfLines={1}
+                                  >
+                                    {item.estimatedTime}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.focusTitleRow}>
+                                <Text
+                                  style={[styles.focusTitle, { color: colors.text }]}
+                                  numberOfLines={1}
+                                >
+                                  {item.title}
+                                </Text>
+                                <ChevronRight size={14} color={colors.textTertiary} strokeWidth={2} />
                               </View>
                             </View>
-                            <View style={styles.focusTitleRow}>
-                              <ExpandableFocusTitle title={item.title} color={colors.text} />
-                              <Pressable
-                                accessibilityRole="button"
-                                accessibilityLabel={`Open details for ${item.title}`}
-                                onPress={() => openFocus(item.id)}
-                                hitSlop={8}
-                              >
-                                <ChevronRight size={14} color={colors.textTertiary} strokeWidth={2} />
-                              </Pressable>
-                            </View>
                           </View>
-                        </View>
+                        </Pressable>
                         <View style={styles.focusThread}>
                           <FocusRow
                             item={item}
-                            onOpenDetail={() => openFocus(item.id)}
+                            onPress={() => openFocus(item.id)}
                             onActionPress={(action) => onFocusAction(item.id, action)}
                           />
                         </View>
@@ -562,13 +538,8 @@ const styles = StyleSheet.create({
   focusTitleRow: {
     flexDirection: 'row',
     flexWrap: 'nowrap',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: spacing[4],
-    minWidth: 0,
-  },
-  focusTitlePress: {
-    flexGrow: 1,
-    flexShrink: 1,
     minWidth: 0,
   },
   focusTitle: {
@@ -576,6 +547,9 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.semibold,
     fontWeight: '600',
     letterSpacing: -0.2,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   focusThread: {
     paddingHorizontal: spacing[12],

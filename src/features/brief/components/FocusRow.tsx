@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FocusActions } from '@/features/brief/components/FocusActions';
@@ -8,30 +7,23 @@ import { typography } from '@/theme';
 
 type FocusRowProps = {
   item: FocusItem;
-  /** Opens the focus detail screen (title / chevron). */
-  onOpenDetail?: () => void;
+  onPress?: () => void;
   onActionPress?: (action: FocusAction) => void;
 };
 
-/** Focus reason + context-specific action chips — tap body to expand/collapse. */
-export function FocusRow({ item, onOpenDetail, onActionPress }: FocusRowProps) {
+/** Focus reason (single-line ellipsis) + context-specific action chips. */
+export function FocusRow({ item, onPress, onActionPress }: FocusRowProps) {
   const colors = useThemeColors();
-  const [expanded, setExpanded] = useState(false);
 
   return (
     <View style={styles.wrap}>
       <Pressable
         accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        accessibilityLabel={`${item.title}. ${item.reason}. ${expanded ? 'Collapse' : 'Expand'} details`}
-        onPress={() => setExpanded((prev) => !prev)}
-        onLongPress={onOpenDetail}
+        accessibilityLabel={`${item.title}. ${item.reason}. ${item.priority} priority`}
+        onPress={onPress}
         style={({ pressed }) => [pressed && styles.pressed]}
       >
-        <Text
-          style={[styles.summary, { color: colors.text }]}
-          numberOfLines={expanded ? undefined : 2}
-        >
+        <Text style={[styles.summary, { color: colors.text }]} numberOfLines={1}>
           {item.reason}
         </Text>
       </Pressable>
@@ -47,6 +39,6 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.72 },
   summary: {
     ...typography.caption,
-    lineHeight: 18,
+    lineHeight: 16,
   },
 });

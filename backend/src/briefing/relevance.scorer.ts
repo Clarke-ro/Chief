@@ -394,6 +394,63 @@ export function synthesizeWorkCopy(input: SynthesisInput): {
   };
 }
 
+/**
+ * Short bullet list from email/event body for Brief expand UI.
+ * Keeps 2–4 crisp blocks — not a raw dump.
+ */
+export function summarizeBodyAsBriefList(
+  bodyText?: string | null,
+  snippet?: string | null,
+  fallback?: string | null,
+): string {
+  const raw = `${bodyText ?? ''}\n${snippet ?? ''}`.trim();
+  const candidates: string[] = [];
+
+  if (raw) {
+    const normalized = raw
+      .replace(/\r/g, '')
+      .replace(/https?:\/\/\S+/gi, '')
+      .replace(/\b(unsubscribe|view in browser|privacy policy|manage preferences)\b.*$/gim, '');
+
+    for (const line of normalized.split(/\n+/)) {
+      const cleaned = collapseWhitespace(
+        line.replace(/^[•\-\*\u2022\d]+[.)]\s*/, '').replace(/[<>]/g, ' '),
+      );
+      if (isUsefulBriefLine(cleaned)) candidates.push(truncate(cleaned, 110));
+      if (candidates.length >= 4) break;
+    }
+
+    if (candidates.length < 2) {
+      const sentences = normalized
+        .split(/(?<=[.!?])\s+/)
+        .map((s) => collapseWhitespace(s.replace(/[<>]/g, ' ')))
+        .filter(isUsefulBriefLine);
+      for (const sentence of sentences) {
+        if (candidates.some((c) => c === sentence || c.includes(sentence.slice(0, 40)))) continue;
+        candidates.push(truncate(sentence, 110));
+        if (candidates.length >= 4) break;
+      }
+    }
+  }
+
+  if (candidates.length === 0 && fallback?.trim()) {
+    candidates.push(truncate(collapseWhitespace(fallback), 110));
+  }
+
+  if (candidates.length === 0) {
+    return '• Skim for the ask, then decide reply / schedule / done';
+  }
+
+  return candidates.map((line) => `• ${line}`).join('\n');
+}
+
+function isUsefulBriefLine(value: string): boolean {
+  if (value.length < 28) return false;
+  if (/^(hi|hello|dear|thanks|thank you|best|regards|sent from)\b/i.test(value)) return false;
+  if (/^[\W\d_]+$/.test(value)) return false;
+  return true;
+}
+
 function craftGenericHeadline(input: {
   topic: string;
   brand: string | null;
@@ -514,7 +571,7 @@ export function toActionableTitle(input: {
   return synthesizeWorkCopy(input).headline;
 }
 
-/** Supporting line under the title — stakes and next step, not “thread from…”. */
+/** Compact Focus subtitle — one ellipsis-friendly line, not a body dump. */
 export function buildActionReason(input: {
   workKind: WorkKind;
   title: string;
@@ -526,22 +583,6 @@ export function buildActionReason(input: {
   estimatedTime: string;
   now?: Date;
 }): string {
-  const synthesized = synthesizeWorkCopy({
-    kind:
-      input.workKind === 'meeting'
-        ? 'event'
-        : input.workKind === 'task'
-          ? 'task'
-          : 'email',
-    title: input.title,
-    fromName: input.fromName,
-    startsAt: input.startsAt,
-    dueAt: input.dueAt,
-    snippet: input.snippet,
-    bodyText: input.bodyText,
-    now: input.now,
-  });
-
   const now = input.now ?? new Date();
   const timing = input.dueAt
     ? `Deadline: ${formatRelativeDeadline(input.dueAt, now)}`
@@ -549,8 +590,36 @@ export function buildActionReason(input: {
       ? `When: ${formatRelativeDeadline(input.startsAt, now)}`
       : null;
 
-  return collapseWhitespace(
-    [timing, synthesized.detail, `Est. ${input.estimatedTime}`].filter(Boolean).join(' · '),
+  let stake: string | null = null;
+  switch (input.workKind) {
+    case 'invoice':
+      stake = 'Payment may be required';
+      break;
+    case 'security':
+      stake = 'Confirm this was you';
+      break;
+    case 'meeting':
+      stake = 'Walk in prepared';
+      break;
+    case 'deadline':
+      stake = inferDeadlineHint(input.title, input.snippet) ?? 'Time-sensitive';
+      break;
+    case 'career':
+      stake = 'Career next step';
+      break;
+    case 'approval':
+      stake = 'Waiting on your decision';
+      break;
+    default: {
+      const snippet = collapseWhitespace(input.snippet ?? '').slice(0, 56);
+      stake = snippet || null;
+      break;
+    }
+  }
+
+  return truncate(
+    collapseWhitespace([timing, stake, `Est. ${input.estimatedTime}`].filter(Boolean).join(' · ')),
+    88,
   );
 }
 
