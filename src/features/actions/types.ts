@@ -9,7 +9,7 @@ export type CanvasKind = 'email' | 'message' | 'notes' | 'schedule';
  */
 export type HandoffTarget = PlatformIconId | 'generic';
 
-export type ActionExecution = 'canvas' | 'handoff';
+export type ActionExecution = 'canvas' | 'handoff' | 'unavailable';
 
 /** A one-tap actionable item attached to a Chief reply (or Home/Focus). */
 export type ActionableTask = {

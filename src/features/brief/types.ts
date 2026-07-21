@@ -1,12 +1,24 @@
 import type { PlatformId, PriorityLevel } from '@/components/ui';
+import type { HandoffTarget } from '@/features/actions/types';
 
 export type FocusActionTone = 'neutral' | 'accent';
+export type FocusActionExecution = 'ask_chief' | 'handoff';
+
+export type FocusActionHandoff = {
+  target: HandoffTarget;
+  url: string;
+  summary?: string;
+};
 
 /** One-tap action suggested for a focus item (Ask Chief, draft, reschedule, …). */
 export type FocusAction = {
   id: string;
   label: string;
   tone?: FocusActionTone;
+  /** Execution comes from the source-aware briefing contract, never label inference. */
+  execution?: FocusActionExecution;
+  /** Present only when a verified source destination is available. */
+  handoff?: FocusActionHandoff;
 };
 
 export type FocusItem = {

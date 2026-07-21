@@ -1,9 +1,24 @@
 /** HomeBrief-shaped API contract shared with the Expo client. */
 
+export type FocusActionExecution = 'ask_chief' | 'handoff';
+
+/** A trusted destination emitted by the briefing service for a source item. */
+export type FocusHandoffTarget = 'gmail' | 'calendar';
+
+export type FocusHandoffDto = {
+  target: FocusHandoffTarget;
+  url: string;
+  summary?: string;
+};
+
 export type FocusActionDto = {
   id: string;
   label: string;
   tone?: 'neutral' | 'accent';
+  /** Explicit execution prevents the client from guessing from a label. */
+  execution?: FocusActionExecution;
+  /** Present only when Chief has a verified external destination. */
+  handoff?: FocusHandoffDto;
 };
 
 export type FocusItemDto = {

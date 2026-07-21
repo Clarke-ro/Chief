@@ -15,9 +15,17 @@ export const homeBrief: HomeBrief = {
       priority: 'high',
       confidence: 0.96,
       actions: [
-        { id: 'f1-ask', label: 'Ask Chief', tone: 'accent' },
-        { id: 'f1-open', label: 'Open PR' },
-        { id: 'f1-merge', label: 'Merge', tone: 'accent' },
+        { id: 'f1-ask', label: 'Ask Chief', tone: 'accent', execution: 'ask_chief' },
+        {
+          id: 'f1-open',
+          label: 'Open PR',
+          execution: 'handoff',
+          handoff: {
+            target: 'github',
+            url: 'https://github.com',
+            summary: 'Opens GitHub so you can review and merge PR #182.',
+          },
+        },
       ],
       urgencyLabel: 'Blocks deployment',
       aboutTitle: 'Blocking release',
@@ -39,9 +47,17 @@ export const homeBrief: HomeBrief = {
       priority: 'high',
       confidence: 0.9,
       actions: [
-        { id: 'f2-ask', label: 'Ask Chief', tone: 'accent' },
-        { id: 'f2-draft', label: 'Draft email' },
-        { id: 'f2-send', label: 'Send reply', tone: 'accent' },
+        { id: 'f2-ask', label: 'Ask Chief', execution: 'ask_chief' },
+        {
+          id: 'f2-open',
+          label: 'Reply',
+          execution: 'handoff',
+          handoff: {
+            target: 'gmail',
+            url: 'https://mail.google.com/mail/u/0/#inbox',
+            summary: 'Opens Gmail so you can reply to the investor thread.',
+          },
+        },
       ],
       urgencyLabel: 'Same-day reply',
       aboutTitle: 'Investor thread',
@@ -63,9 +79,17 @@ export const homeBrief: HomeBrief = {
       priority: 'medium',
       confidence: 0.85,
       actions: [
-        { id: 'f3-ask', label: 'Ask Chief', tone: 'accent' },
-        { id: 'f3-reschedule', label: 'Reschedule', tone: 'accent' },
-        { id: 'f3-find', label: 'Find time' },
+        { id: 'f3-ask', label: 'Ask Chief', execution: 'ask_chief' },
+        {
+          id: 'f3-open',
+          label: 'Prepare',
+          execution: 'handoff',
+          handoff: {
+            target: 'calendar',
+            url: 'https://calendar.google.com',
+            summary: 'Opens Google Calendar so you can resolve the conflict.',
+          },
+        },
       ],
       urgencyLabel: 'Schedule conflict',
       aboutTitle: 'Calendar conflict',
@@ -87,8 +111,7 @@ export const homeBrief: HomeBrief = {
       priority: 'medium',
       confidence: 0.88,
       actions: [
-        { id: 'f4-ask', label: 'Ask Chief', tone: 'accent' },
-        { id: 'f4-reply', label: 'Reply in Slack' },
+        { id: 'f4-ask', label: 'Ask Chief', execution: 'ask_chief' },
         { id: 'f4-decide', label: 'Decide', tone: 'accent' },
       ],
       urgencyLabel: 'Blocks engineering',

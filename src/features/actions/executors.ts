@@ -10,13 +10,19 @@ export function openCanvas(task: ActionableTask) {
   useCanvasStore.getState().open(task, 'panel');
 }
 
+/** Explain why an action cannot execute instead of falling back to another app. */
+export function showUnavailableAction(task: Pick<ActionableTask, 'summary'>) {
+  Alert.alert(
+    'Action unavailable',
+    task.summary ?? 'Chief does not have a verified link for this item yet.',
+  );
+}
+
 function confirmAndOpen(title: string, url: string, summary?: string) {
   const preview = summarizeUrlForDisplay(url);
   Alert.alert(
     title,
-    summary
-      ? `${summary}\n\nOpen ${preview}?`
-      : `Continue in another app?\n\n${preview}`,
+    summary ? `${summary}\n\nOpen ${preview}?` : `Continue in another app?\n\n${preview}`,
     [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -33,11 +39,11 @@ function confirmAndOpen(title: string, url: string, summary?: string) {
 
 /** Hand off to an external app — Chief can't finish this inside the product. */
 export async function openHandoff(task: ActionableTask) {
-  const title = handoffLabel(task.handoffTarget);
+  const title = task.label?.trim() || handoffLabel(task.handoffTarget);
   const safety = assertSafeExternalUrl(task.url);
 
   if (!safety.ok) {
-    Alert.alert(title, task.summary ?? 'This step needs to finish in another app.');
+    showUnavailableAction(task);
     return;
   }
 

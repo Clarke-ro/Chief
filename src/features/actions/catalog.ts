@@ -1,6 +1,34 @@
 import { HANDOFF_URLS } from '@/config/handoffUrls';
 import type { ActionableTask, CanvasKind, HandoffTarget } from '@/features/actions/types';
 
+type FocusActionInput = {
+  id: string;
+  label: string;
+  execution?: 'ask_chief' | 'handoff';
+  handoff?: {
+    target: HandoffTarget;
+    url: string;
+    summary?: string;
+  };
+};
+
+const HANDOFF_TARGETS = new Set<HandoffTarget>([
+  'gmail',
+  'calendar',
+  'slack',
+  'github',
+  'notion',
+  'asana',
+  'trello',
+  'generic',
+]);
+
+function handoffTargetFor(value: unknown): HandoffTarget {
+  return typeof value === 'string' && HANDOFF_TARGETS.has(value as HandoffTarget)
+    ? (value as HandoffTarget)
+    : 'generic';
+}
+
 /** Default drafts Chief produces when starting canvas work. */
 const CANVAS_DRAFTS: Record<
   CanvasKind,
@@ -46,10 +74,7 @@ Attendees already free in the alternate slot.`,
   },
 };
 
-const HANDOFF_DEFAULTS: Record<
-  string,
-  { url: string; target: HandoffTarget; summary: string }
-> = {
+const HANDOFF_DEFAULTS: Record<string, { url: string; target: HandoffTarget; summary: string }> = {
   github: {
     url: HANDOFF_URLS.github,
     target: 'github',
@@ -80,11 +105,18 @@ const HANDOFF_DEFAULTS: Record<
 function inferFromLabel(label: string): Partial<ActionableTask> {
   const lower = label.toLowerCase();
 
-  if (lower.includes('draft') && (lower.includes('email') || lower.includes('reply') || lower.includes('update'))) {
-    const kind: CanvasKind = lower.includes('slack') || lower.includes('message') ? 'message' : 'email';
+  if (
+    lower.includes('draft') &&
+    (lower.includes('email') || lower.includes('reply') || lower.includes('update'))
+  ) {
+    const kind: CanvasKind =
+      lower.includes('slack') || lower.includes('message') ? 'message' : 'email';
     return { execution: 'canvas', canvasKind: kind, ...CANVAS_DRAFTS[kind] };
   }
-  if (lower.includes('draft') && (lower.includes('talk') || lower.includes('status') || lower.includes('note'))) {
+  if (
+    lower.includes('draft') &&
+    (lower.includes('talk') || lower.includes('status') || lower.includes('note'))
+  ) {
     return { execution: 'canvas', canvasKind: 'notes', ...CANVAS_DRAFTS.notes };
   }
   if (lower.includes('draft') && lower.includes('reply')) {
@@ -93,10 +125,20 @@ function inferFromLabel(label: string): Partial<ActionableTask> {
   if (lower.includes('ping') || lower.includes('notify') || lower.includes('message')) {
     return { execution: 'canvas', canvasKind: 'message', ...CANVAS_DRAFTS.message };
   }
-  if (lower.includes('reschedule') || lower.includes('schedule') || lower.includes('block focus') || lower.includes('find time')) {
+  if (
+    lower.includes('reschedule') ||
+    lower.includes('schedule') ||
+    lower.includes('block focus') ||
+    lower.includes('find time')
+  ) {
     return { execution: 'canvas', canvasKind: 'schedule', ...CANVAS_DRAFTS.schedule };
   }
-  if (lower.includes('github') || lower.includes('merge') || lower.includes('open pr') || lower.includes('open source')) {
+  if (
+    lower.includes('github') ||
+    lower.includes('merge') ||
+    lower.includes('open pr') ||
+    lower.includes('open source')
+  ) {
     return {
       execution: 'handoff',
       handoffTarget: 'github',
@@ -125,9 +167,10 @@ function inferFromLabel(label: string): Partial<ActionableTask> {
       execution: 'canvas',
       canvasKind: 'notes',
       context: 'ask-chief',
-      draft: lower.includes('summarize') || lower.includes('summary')
-        ? `Summarize the key points and risks for: ${label}`
-        : `Explain this and what I should do next: ${label}`,
+      draft:
+        lower.includes('summarize') || lower.includes('summary')
+          ? `Summarize the key points and risks for: ${label}`
+          : `Explain this and what I should do next: ${label}`,
       summary: 'Continue with Chief in chat.',
     };
   }
@@ -167,11 +210,40 @@ export function resolveActionableTask(
 /** Map Home/Focus action ids into actionable tasks. */
 export function resolveFocusActionable(
   focusTitle: string,
-  action: { id: string; label: string },
+  action: FocusActionInput,
 ): ActionableTask {
   const id = action.id.toLowerCase();
 
-  if (id.includes('ask') || id.includes('explain') || id.includes('summar')) {
+  if (action.execution === 'handoff') {
+    const url = action.handoff?.url?.trim();
+    if (!url) {
+      return {
+        id: action.id,
+        label: action.label,
+        execution: 'unavailable',
+        title: focusTitle,
+        summary: 'Chief does not have a verified link for this source item yet.',
+        context: focusTitle,
+      };
+    }
+    return {
+      id: action.id,
+      label: action.label,
+      execution: 'handoff',
+      handoffTarget: handoffTargetFor(action.handoff?.target),
+      url,
+      title: focusTitle,
+      summary: action.handoff?.summary ?? 'Open the source item to continue.',
+      context: focusTitle,
+    };
+  }
+
+  if (
+    action.execution === 'ask_chief' ||
+    id.includes('ask') ||
+    id.includes('explain') ||
+    id.includes('summar')
+  ) {
     const draft = id.includes('summar')
       ? `Summarize the key points and risks for: ${focusTitle}`
       : id.includes('explain')
@@ -208,14 +280,14 @@ export function resolveFocusActionable(
   }
 
   if (id.includes('merge') || id.includes('open') || id.includes('pr')) {
-    return resolveActionableTask(action, {
-      execution: 'handoff',
-      handoffTarget: 'github',
-      url: HANDOFF_URLS.github,
+    return {
+      id: action.id,
+      label: action.label,
+      execution: 'unavailable',
       title: focusTitle,
-      summary: "Chief can't merge PRs outside the app — open GitHub to finish.",
+      summary: 'Chief needs a verified source link before it can open this item.',
       context: focusTitle,
-    });
+    };
   }
 
   if (id.includes('slack') || id.includes('decide')) {
@@ -321,4 +393,3 @@ export function canvasRelatedActions(task: ActionableTask): { id: string; label:
   }
   return [{ id: `${task.id}-rewrite`, label: 'Rewrite this' }];
 }
-
