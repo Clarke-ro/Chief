@@ -1,9 +1,22 @@
 import type { AnalyticsSnapshot } from '@/features/analytics/types';
-import { analyticsSnapshot } from '@/mock/analytics/snapshot';
 
-/** Seed for analytics. Live snapshot lives in workspaceStore (synced with Today). */
+const emptyAnalytics: AnalyticsSnapshot = {
+  productivity: {
+    score: 0,
+    weeklyChange: 0,
+    monthlyTrend: [],
+    insight: '',
+  },
+  aiImpact: [],
+  workBreakdown: [],
+  performance: [],
+  weeklyTrends: [],
+  achievements: [],
+};
+
+/** Analytics snapshot — empty until live analytics ships. */
 export const analyticsRepository = {
   getSnapshot(): AnalyticsSnapshot {
-    return analyticsSnapshot;
+    return emptyAnalytics;
   },
 };

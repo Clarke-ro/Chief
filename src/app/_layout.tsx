@@ -7,6 +7,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { OfflineBanner } from '@/components/OfflineBanner';
+import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import { ThemeSync } from '@/components/ThemeSync';
 import { CanvasPanelHost } from '@/features/actions/components/CanvasPanelHost';
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
@@ -26,6 +28,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <ThemeSync />
           <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+          <OfflineBanner />
           <Stack
             screenOptions={{
               headerShown: false,
@@ -62,6 +65,7 @@ export default function RootLayout() {
               }}
             />
           </Stack>
+          <PwaInstallPrompt />
           <CanvasPanelHost />
         </QueryClientProvider>
       </ErrorBoundary>

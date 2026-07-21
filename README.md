@@ -6,7 +6,7 @@ Chief connects to the tools you already use (starting with Google Workspace), sy
 
 | Surface | URL |
 |---------|-----|
-| Web app | [chief-nine-omega.vercel.app](https://chief-nine-omega.vercel.app) |
+| Web / PWA | [chief-nine-omega.vercel.app](https://chief-nine-omega.vercel.app) — installable progressive web app |
 | API | Railway (`api` + `worker` services) |
 | Repo | Monorepo — Expo app at root, Nest API in `backend/` |
 
@@ -226,7 +226,7 @@ API can also run sync in-process so Home still fills when the worker is down; th
 
 ### Production-style deploys
 
-- **Web:** push to `main` → Vercel  
+- **Web / PWA:** push to `main` → Vercel (`npm run build:web` exports the SPA + Workbox service worker)  
 - **API:** from monorepo root or as configured: `railway up --service api` (Root Directory `backend`)  
 - **Worker:** `cd backend && railway up --service worker`
 

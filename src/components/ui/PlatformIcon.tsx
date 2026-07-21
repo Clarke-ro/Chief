@@ -2,6 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 import { GmailMark } from '@/components/ui/gmailMark';
+import { SlackMark } from '@/components/ui/slackMark';
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { platformBrand } from '@/theme';
 
@@ -84,14 +85,7 @@ function Mark({
         </Svg>
       );
     case 'slack':
-      return (
-        <Svg width={s} height={s} viewBox="0 0 24 24">
-          <Path
-            d="M8 14a2 2 0 11-2-2h2v2zm0-6V4a2 2 0 114 0v4H8zm6 6h4a2 2 0 110 4h-4v-4zm0-6a2 2 0 112 2v-2h-2zm-6 6H4a2 2 0 110-4h4v4zm6 0V20a2 2 0 11-4 0v-4h4z"
-            fill={onBrand}
-          />
-        </Svg>
-      );
+      return <SlackMark size={size * 0.62} />;
     case 'github':
       return (
         <Svg width={s} height={s} viewBox="0 0 24 24">
@@ -182,7 +176,7 @@ function backgroundFor(platform: PlatformIconId, scheme: string | null | undefin
     case 'docs':
       return platformBrand.docs;
     case 'slack':
-      return platformBrand.slack;
+      return '#FFFFFF';
     case 'github':
       return scheme === 'dark' ? platformBrand.githubDark : platformBrand.github;
     case 'notion':
@@ -213,7 +207,7 @@ export function PlatformIcon({ platform, size = 36 }: PlatformIconProps) {
   const scheme = useResolvedColorScheme();
   const bg = backgroundFor(platform, scheme);
   const onBrand = markColor(platform, scheme);
-  const isGmail = platform === 'gmail';
+  const lightTile = platform === 'gmail' || platform === 'slack';
 
   return (
     <View
@@ -224,8 +218,8 @@ export function PlatformIcon({ platform, size = 36 }: PlatformIconProps) {
           height: size,
           borderRadius: size * 0.3,
           backgroundColor: bg,
-          borderWidth: isGmail ? StyleSheet.hairlineWidth : 0,
-          borderColor: isGmail ? (scheme === 'dark' ? '#3A3A3C' : '#E0E0E0') : 'transparent',
+          borderWidth: lightTile ? StyleSheet.hairlineWidth : 0,
+          borderColor: lightTile ? (scheme === 'dark' ? '#3A3A3C' : '#E0E0E0') : 'transparent',
         },
       ]}
       accessibilityRole="image"

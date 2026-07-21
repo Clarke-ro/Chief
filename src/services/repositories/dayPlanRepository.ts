@@ -1,11 +1,9 @@
 import { env } from '@/config/env';
 import type { DayPlanItem, DayPlanStatus, ScheduleBlockKind, SweepPhase } from '@/features/tasks/types';
-import { dayPlanSeed } from '@/mock/tasks/dayPlan';
 import { ensureActiveWorkspaceId, getActiveWorkspaceId } from '@/services/activeWorkspace';
 import { apiJson, ApiError, ApiNetworkError } from '@/services/api/client';
 import { workspaceDataKeys } from '@/services/storageKeys';
 import { storage } from '@/services/storage';
-import { usePreferencesStore } from '@/stores/preferences';
 
 const PLATFORMS = new Set([
   'gmail',
@@ -65,21 +63,13 @@ function writeCached(items: DayPlanItem[], workspaceId?: string): void {
   }
 }
 
-function shouldUseMockFallback(): boolean {
-  return !usePreferencesStore.getState().onboardingCompleted;
-}
-
 function normalizeItem(raw: unknown): DayPlanItem | null {
   if (!isDayPlanItem(raw)) return null;
   return raw;
 }
 
-/** Today schedule — live when Home brief is live; MMKV cache; mock seed only pre-onboarding. */
+/** Today schedule — live API + MMKV cache only (no mock seed). */
 export const dayPlanRepository = {
-  getSeed(): DayPlanItem[] {
-    return dayPlanSeed.map((item) => ({ ...item }));
-  },
-
   readCache(workspaceId?: string): DayPlanItem[] | null {
     return readCached(workspaceId);
   },
@@ -93,9 +83,7 @@ export const dayPlanRepository = {
     const cached = readCached(wsId);
 
     if (!env.isApiConfigured || !env.liveHomeBrief) {
-      return shouldUseMockFallback()
-        ? dayPlanRepository.getSeed()
-        : cached ?? (shouldUseMockFallback() ? dayPlanRepository.getSeed() : []);
+      return cached ?? [];
     }
 
     try {
@@ -117,8 +105,7 @@ export const dayPlanRepository = {
               : 'unknown';
         console.warn('[dayPlanRepository] live fetch failed — keeping cache', label);
       }
-      if (cached) return cached;
-      return shouldUseMockFallback() ? dayPlanRepository.getSeed() : [];
+      return cached ?? [];
     }
   },
 

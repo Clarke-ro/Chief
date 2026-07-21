@@ -1,11 +1,9 @@
 import { env } from '@/config/env';
 import type { FocusItem, HomeBrief } from '@/features/brief/types';
-import { homeBrief as mockHomeBrief } from '@/mock/briefings/homeBrief';
 import { ensureActiveWorkspaceId, getActiveWorkspaceId } from '@/services/activeWorkspace';
 import { apiJson, ApiError, ApiNetworkError } from '@/services/api/client';
 import { workspaceDataKeys } from '@/services/storageKeys';
 import { storage } from '@/services/storage';
-import { usePreferencesStore } from '@/stores/preferences';
 
 function isHomeBrief(value: unknown): value is HomeBrief {
   if (!value || typeof value !== 'object') return false;
@@ -57,22 +55,11 @@ function emptyBrief(userName = 'there'): HomeBrief {
   };
 }
 
-function shouldUseMockFallback(): boolean {
-  // After onboarding with a live API, never paint mock seed data.
-  if (env.isApiConfigured && usePreferencesStore.getState().onboardingCompleted) {
-    return false;
-  }
-  return !env.liveHomeBrief;
-}
-
-/** Seed for Home brief + focus. Live reads go through `fetchHomeBrief` when flagged. */
+/** Home brief + focus — cache / live API only (no mock seed). */
 export const briefRepository = {
-  /** Cache-first snapshot for instant Home paint (never mock after onboarding). */
+  /** Cache-first snapshot for instant Home paint. */
   getHomeBrief(workspaceId?: string): HomeBrief {
-    const cached = readCachedBrief(workspaceId);
-    if (cached) return cached;
-    if (shouldUseMockFallback()) return mockHomeBrief;
-    return emptyBrief();
+    return readCachedBrief(workspaceId) ?? emptyBrief();
   },
 
   getFocusById(id: string): FocusItem | undefined {
@@ -99,20 +86,13 @@ export const briefRepository = {
     }
   },
 
-  /**
-   * Live brief when API is configured.
-   * After onboarding: cache on success; on failure keep cache / empty — never mock.
-   */
+  /** Live brief when API is configured; otherwise cache / empty. */
   async fetchHomeBrief(workspaceId?: string): Promise<HomeBrief> {
     const wsId = workspaceId?.trim() || (await ensureActiveWorkspaceId());
     const cached = readCachedBrief(wsId);
 
     if (!env.isApiConfigured) {
-      return shouldUseMockFallback() ? mockHomeBrief : cached ?? emptyBrief();
-    }
-
-    if (!env.liveHomeBrief && shouldUseMockFallback()) {
-      return mockHomeBrief;
+      return cached ?? emptyBrief();
     }
 
     try {
@@ -136,8 +116,7 @@ export const briefRepository = {
               : 'unknown';
         console.warn('[briefRepository] live brief failed — keeping cache', label);
       }
-      if (cached) return cached;
-      return shouldUseMockFallback() ? mockHomeBrief : emptyBrief();
+      return cached ?? emptyBrief();
     }
   },
 

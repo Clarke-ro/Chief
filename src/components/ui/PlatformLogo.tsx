@@ -2,6 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 import { GmailMark } from '@/components/ui/gmailMark';
+import { SlackMark } from '@/components/ui/slackMark';
 
 export type PlatformId = 'gmail' | 'calendar' | 'slack' | 'github' | 'notion' | 'asana' | 'trello';
 
@@ -13,7 +14,7 @@ type PlatformLogoProps = {
 const PLATFORM_COLORS: Record<PlatformId, string> = {
   gmail: '#FFFFFF',
   calendar: '#4285F4',
-  slack: '#611F69',
+  slack: '#FFFFFF',
   github: '#24292F',
   notion: '#111113',
   asana: '#F06A6A',
@@ -44,14 +45,7 @@ function Mark({ platform, size }: { platform: PlatformId; size: number }) {
         </Svg>
       );
     case 'slack':
-      return (
-        <Svg width={s} height={s} viewBox="0 0 24 24">
-          <Path
-            d="M8 14a2 2 0 11-2-2h2v2zm0-6V4a2 2 0 114 0v4H8zm6 6h4a2 2 0 110 4h-4v-4zm0-6a2 2 0 112 2v-2h-2zm-6 6H4a2 2 0 110-4h4v4zm6 0V20a2 2 0 11-4 0v-4h4z"
-            fill={stroke}
-          />
-        </Svg>
-      );
+      return <SlackMark size={size * 0.62} />;
     case 'github':
       return (
         <Svg width={s} height={s} viewBox="0 0 24 24">
@@ -103,7 +97,7 @@ function Mark({ platform, size }: { platform: PlatformId; size: number }) {
 }
 
 export function PlatformLogo({ platform, size = 36 }: PlatformLogoProps) {
-  const isGmail = platform === 'gmail';
+  const lightTile = platform === 'gmail' || platform === 'slack';
   return (
     <View
       style={[
@@ -113,8 +107,8 @@ export function PlatformLogo({ platform, size = 36 }: PlatformLogoProps) {
           height: size,
           borderRadius: size * 0.3,
           backgroundColor: PLATFORM_COLORS[platform],
-          borderWidth: isGmail ? StyleSheet.hairlineWidth : 0,
-          borderColor: isGmail ? '#E0E0E0' : 'transparent',
+          borderWidth: lightTile ? StyleSheet.hairlineWidth : 0,
+          borderColor: lightTile ? '#E0E0E0' : 'transparent',
         },
       ]}
       accessibilityLabel={`${platform} logo`}

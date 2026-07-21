@@ -12,7 +12,6 @@ import { env } from '@/config/env';
 import {
   analyticsRepository,
   briefRepository,
-  chiefRepository,
   dayPlanRepository,
   profileRepository,
 } from '@/services/repositories';
@@ -69,7 +68,7 @@ type WorkspaceState = {
   /** Chief — append Chief reply to the active session. */
   appendChiefReply: (chiefTurn: ConversationTurn) => void;
 
-  /** After log out — reload seed data into memory (storage already cleared). */
+  /** After log out — reload empty slices into memory (storage already cleared). */
   resetAfterLogout: () => void;
 
   /** Reload persisted slices for a workspace (multi-workspace switch). */
@@ -120,23 +119,18 @@ function withProfileName(brief: HomeBrief, profile: ProfileSnapshot): HomeBrief 
   return { ...brief, userName: firstName(profile.user.name) };
 }
 
-function seedDayPlan(): DayPlanItem[] {
-  return sortDayPlan(dayPlanRepository.getSeed());
-}
-
 function readDayPlan(workspaceId?: WorkspaceId): DayPlanItem[] {
   const keys = dataKeys(workspaceId);
   const raw = readScopedString(keys.dayPlan, LEGACY_KEYS.dayPlan);
-  const emptyFallback = () => (env.liveHomeBrief ? [] : seedDayPlan());
-  if (!raw) return emptyFallback();
+  if (!raw) return [];
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) return emptyFallback();
+    if (!Array.isArray(parsed) || parsed.length === 0) return [];
     const items = parsed.filter(isDayPlanItem);
-    if (items.length === 0) return emptyFallback();
+    if (items.length === 0) return [];
     return sortDayPlan(items);
   } catch {
-    return emptyFallback();
+    return [];
   }
 }
 
@@ -162,21 +156,37 @@ function isChatSession(value: unknown): value is ChatSession {
   );
 }
 
+/** Legacy demo session ids — strip if still persisted from older builds. */
+const MOCK_SESSION_IDS = new Set([
+  'session-morning',
+  'session-pr182',
+  'session-investor',
+  'session-slack',
+  'session-afternoon',
+]);
+
 function readSessions(workspaceId?: WorkspaceId): ChatSession[] {
   const keys = dataKeys(workspaceId);
   const raw = readScopedString(keys.sessions, LEGACY_KEYS.sessions);
-  if (raw) {
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        const sessions = parsed.filter(isChatSession);
-        if (sessions.length > 0) return sessions;
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const sessions = parsed
+      .filter(isChatSession)
+      .filter((session) => !MOCK_SESSION_IDS.has(session.id));
+    // Drop purged mock seeds from MMKV so they don't reappear.
+    if (sessions.length !== parsed.filter(isChatSession).length) {
+      try {
+        storage.set(keys.sessions, JSON.stringify(sessions));
+      } catch {
+        /* ignore */
       }
-    } catch {
-      /* fall through */
     }
+    return sessions;
+  } catch {
+    return [];
   }
-  return chiefRepository.getWorkspace().sessions;
 }
 
 function persistSessions(sessions: ChatSession[]) {
@@ -460,7 +470,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   resetDayPlan: () => {
-    const dayPlan = seedDayPlan();
+    const dayPlan: DayPlanItem[] = [];
     persistDayPlan(dayPlan);
     const synced = syncProgress(get().brief, get().analytics, dayPlan);
     set({ dayPlan, ...synced });

@@ -49,7 +49,6 @@ export function TasksScreen() {
   const setStatus = useWorkspaceStore((s) => s.setDayPlanStatus);
   const runDueSweep = useWorkspaceStore((s) => s.runDueSweep);
   const refreshDayPlan = useWorkspaceStore((s) => s.refreshDayPlan);
-  const resetToSeed = useWorkspaceStore((s) => s.resetDayPlan);
 
   const [query, setQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -171,21 +170,12 @@ export function TasksScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      if (env.liveHomeBrief) {
-        await refreshDayPlan();
-      } else {
-        await new Promise((r) => setTimeout(r, 500));
-        if (!mounted.current) return;
-        // Mock mode: keep user-added items; only re-seed if empty
-        if (useWorkspaceStore.getState().dayPlan.length === 0) {
-          resetToSeed();
-        }
-      }
+      await refreshDayPlan();
       runDueSweep();
     } finally {
       if (mounted.current) setRefreshing(false);
     }
-  }, [mounted, refreshDayPlan, resetToSeed, runDueSweep]);
+  }, [mounted, refreshDayPlan, runDueSweep]);
 
   const toggleSearch = () => {
     setShowSearch((prev) => {

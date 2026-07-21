@@ -22,7 +22,12 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "Chief",
+      "shortName": "Chief",
+      "description": "Your AI chief of staff for real work — priorities, daily brief, and next actions.",
+      "themeColor": "#5B6CFF",
+      "backgroundColor": "#F7F7F8"
     },
     "plugins": [
       "expo-router",

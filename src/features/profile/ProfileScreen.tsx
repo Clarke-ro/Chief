@@ -24,6 +24,7 @@ import { SettingRow } from '@/features/profile/components/SettingRow';
 import { SettingsGroup } from '@/features/profile/components/SettingsGroup';
 import { mapLiveConnectedApps } from '@/features/profile/mapLiveConnectedApps';
 import type { ConnectedApp } from '@/features/profile/types';
+import { usePwaInstall } from '@/hooks/usePwaInstall';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { ensureActiveWorkspaceId } from '@/services/activeWorkspace';
 import { confirmAction, notifyAlert } from '@/services/confirm';
@@ -307,6 +308,27 @@ export function ProfileScreen() {
     Constants.expoConfig?.android?.versionCode?.toString() ??
     '1';
 
+  const {
+    canPromptInstall,
+    needsManualInstall,
+    isInstalled: pwaInstalled,
+    promptInstall,
+  } = usePwaInstall();
+  const showInstallRow =
+    Platform.OS === 'web' && (canPromptInstall || needsManualInstall || pwaInstalled);
+
+  const handleInstallApp = useCallback(() => {
+    if (pwaInstalled) return;
+    if (needsManualInstall) {
+      notifyAlert(
+        'Add Chief to Home Screen',
+        'Tap Share, then “Add to Home Screen” to install Chief.',
+      );
+      return;
+    }
+    void promptInstall();
+  }, [needsManualInstall, promptInstall, pwaInstalled]);
+
   const bottomPad = insets.bottom + (Platform.OS === 'ios' ? 88 : 24);
   const appsLoading = workspaceQuery.isLoading || integrationsQuery.isLoading;
   const appsError = integrationsQuery.isError;
@@ -463,6 +485,27 @@ export function ProfileScreen() {
                 );
               })}
             </SettingsGroup>
+
+            {showInstallRow ? (
+              <SettingsGroup
+                title="App"
+                description="Install Chief as a progressive web app on this device."
+              >
+                <SettingRow
+                  title={pwaInstalled ? 'Chief installed' : 'Install Chief'}
+                  subtitle={
+                    pwaInstalled
+                      ? 'Running as an installed app'
+                      : needsManualInstall
+                        ? 'Add to Home Screen from Share'
+                        : 'Open standalone with offline shell'
+                  }
+                  showChevron={!pwaInstalled}
+                  onPress={pwaInstalled ? undefined : handleInstallApp}
+                  isLast
+                />
+              </SettingsGroup>
+            ) : null}
 
             <SettingsGroup title="Support">
               <SettingRow

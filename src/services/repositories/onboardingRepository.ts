@@ -1,12 +1,7 @@
 import { listOnboardingIntegrations } from '@/config/integrations/registry';
 import type { OnboardingApp } from '@/features/onboarding/types';
-import {
-  FIRST_BRIEF_ITEMS,
-  SCAN_INSIGHTS,
-  type ScanInsight,
-} from '@/mock/integrations/onboarding';
 
-/** Onboarding catalog data — apps come from the integrations registry. */
+/** Onboarding catalog — apps come from the integrations registry only. */
 export const onboardingRepository = {
   listApps(): OnboardingApp[] {
     return listOnboardingIntegrations().map((item) => ({
@@ -15,13 +10,5 @@ export const onboardingRepository = {
       name: item.name,
       blurb: item.blurb,
     }));
-  },
-
-  listFirstBriefItems() {
-    return FIRST_BRIEF_ITEMS;
-  },
-
-  listScanInsights(): ScanInsight[] {
-    return SCAN_INSIGHTS;
   },
 };

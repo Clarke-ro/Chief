@@ -1,6 +1,6 @@
 /**
- * Central mock fixtures for the Chief frontend.
- * Screens and stores should prefer `@/services/repositories` over importing these directly.
+ * Legacy empty fixtures. Live data goes through `@/services/repositories`.
+ * Do not import these into screens or stores.
  */
 export { homeBrief } from './briefings/homeBrief';
 export { dayPlanSeed } from './tasks/dayPlan';

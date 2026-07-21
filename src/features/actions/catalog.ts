@@ -29,48 +29,30 @@ function handoffTargetFor(value: unknown): HandoffTarget {
     : 'generic';
 }
 
-/** Default drafts Chief produces when starting canvas work. */
+/** Generic canvas starters — no demo narrative. */
 const CANVAS_DRAFTS: Record<
   CanvasKind,
   { title: string; draft: string; recipient?: string; summary: string }
 > = {
   email: {
-    title: 'Follow-up',
-    recipient: 'investor@firm.com',
+    title: 'Draft email',
     summary: 'Chief drafts the reply — review, then open in Mail.',
-    draft: `Hi,
-
-Thanks for the note — happy to share a quick update.
-
-We're on track for the customer demo this afternoon. PR #182 is the last blocker on the payment flow; once that lands, staging stays green and we ship.
-
-Happy to jump on a call next week if useful.
-
-Best,
-Clark`,
+    draft: '',
   },
   message: {
-    title: 'Team update',
-    recipient: '#eng',
+    title: 'Draft message',
     summary: 'Chief drafts the message — review, then open in Slack.',
-    draft: `Quick update: I'm clearing PR #182 now so the afternoon deploy can proceed. Maya / Jordan / Sam — you're unblocked once it merges. Ping me if anything else is holding the demo path.`,
+    draft: '',
   },
   notes: {
-    title: 'Talking points',
-    summary: 'Chief prepares talking points you can take into the meeting.',
-    draft: `• Lead with traction: deploy cadence + today's customer demo
-• Risk you're actively clearing: PR #182 (staging green, merge pending)
-• Ask: partnership timeline and next diligence checkpoint
-• Close with clear next step and owner`,
+    title: 'Notes',
+    summary: 'Chief prepares notes you can take into the meeting.',
+    draft: '',
   },
   schedule: {
     title: 'Reschedule proposal',
     summary: 'Chief proposes a move — confirm, then open Calendar.',
-    draft: `Move Sprint Planning from 10:00 AM → 3:30 PM today.
-
-Reason: protects customer demo prep without slipping team alignment.
-
-Attendees already free in the alternate slot.`,
+    draft: '',
   },
 };
 

@@ -1,10 +1,8 @@
 import { env } from '@/config/env';
 import type { Task, TaskSectionKey, TaskStatus } from '@/features/tasks/types';
-import { taskInventory } from '@/mock/tasks/inventory';
 import { ensureActiveWorkspaceId } from '@/services/activeWorkspace';
 import { apiJson, ApiError, ApiNetworkError } from '@/services/api/client';
 import { paginateArray, type PageParams, type PageResult } from '@/services/api/pagination';
-import { usePreferencesStore } from '@/stores/preferences';
 
 const PLATFORMS = new Set([
   'gmail',
@@ -18,10 +16,6 @@ const PLATFORMS = new Set([
 const PRIORITIES = new Set(['high', 'medium', 'low']);
 const STATUSES = new Set<TaskStatus>(['ready', 'in_progress', 'waiting', 'done']);
 const SECTIONS = new Set<TaskSectionKey>(['today', 'upcoming', 'waiting', 'completed']);
-
-function shouldUseMockFallback(): boolean {
-  return !usePreferencesStore.getState().onboardingCompleted;
-}
 
 function isTask(value: unknown): value is Task {
   if (!value || typeof value !== 'object') return false;
@@ -49,18 +43,18 @@ function normalizeTask(value: unknown): Task | null {
   return isTask(value) ? value : null;
 }
 
-/** Task inventory — live synced + user tasks when Home brief is live. */
+/** Task inventory — live synced + user tasks only (no mock seed). */
 export const taskRepository = {
   list(): Task[] {
-    return taskInventory;
+    return [];
   },
 
   listPage(params?: PageParams): PageResult<Task> {
-    return paginateArray(taskInventory, params);
+    return paginateArray([], params);
   },
 
-  getById(id: string): Task | undefined {
-    return taskInventory.find((task) => task.id === id);
+  getById(_id: string): Task | undefined {
+    return undefined;
   },
 
   async fetchList(options?: {
@@ -68,7 +62,7 @@ export const taskRepository = {
     section?: TaskSectionKey;
   }): Promise<Task[]> {
     if (!env.isApiConfigured || !env.liveHomeBrief) {
-      return shouldUseMockFallback() ? [...taskInventory] : [];
+      return [];
     }
 
     const wsId = options?.workspaceId?.trim() || (await ensureActiveWorkspaceId());
@@ -89,13 +83,13 @@ export const taskRepository = {
               : 'unknown';
         console.warn('[taskRepository] live list failed', label);
       }
-      return shouldUseMockFallback() ? [...taskInventory] : [];
+      return [];
     }
   },
 
   async fetchById(id: string, workspaceId?: string): Promise<Task | undefined> {
     if (!env.isApiConfigured || !env.liveHomeBrief) {
-      return taskRepository.getById(id);
+      return undefined;
     }
 
     const wsId = workspaceId?.trim() || (await ensureActiveWorkspaceId());
@@ -110,7 +104,7 @@ export const taskRepository = {
       if (__DEV__) {
         console.warn('[taskRepository] live getById failed', error);
       }
-      return shouldUseMockFallback() ? taskRepository.getById(id) : undefined;
+      return undefined;
     }
   },
 
