@@ -1,6 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
+import { GmailMark } from '@/components/ui/gmailMark';
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { platformBrand } from '@/theme';
 
@@ -53,18 +54,7 @@ function Mark({
 
   switch (platform) {
     case 'gmail':
-      return (
-        <Svg width={s} height={s} viewBox="0 0 24 24">
-          <Path
-            d="M3 6.5V18a1.5 1.5 0 001.5 1.5h15A1.5 1.5 0 0021 18V6.5L12 13 3 6.5z"
-            fill="none"
-            stroke={onBrand}
-            strokeWidth={1.8}
-            strokeLinejoin="round"
-          />
-          <Path d="M3 6.5L12 13l9-6.5" fill="none" stroke={onBrand} strokeWidth={1.8} />
-        </Svg>
-      );
+      return <GmailMark size={size * 0.72} />;
     case 'calendar':
       return (
         <Svg width={s} height={s} viewBox="0 0 24 24">
@@ -184,7 +174,7 @@ function Mark({
 function backgroundFor(platform: PlatformIconId, scheme: string | null | undefined): string {
   switch (platform) {
     case 'gmail':
-      return platformBrand.gmail;
+      return '#FFFFFF';
     case 'calendar':
       return platformBrand.calendar;
     case 'drive':
@@ -223,6 +213,7 @@ export function PlatformIcon({ platform, size = 36 }: PlatformIconProps) {
   const scheme = useResolvedColorScheme();
   const bg = backgroundFor(platform, scheme);
   const onBrand = markColor(platform, scheme);
+  const isGmail = platform === 'gmail';
 
   return (
     <View
@@ -233,6 +224,8 @@ export function PlatformIcon({ platform, size = 36 }: PlatformIconProps) {
           height: size,
           borderRadius: size * 0.3,
           backgroundColor: bg,
+          borderWidth: isGmail ? StyleSheet.hairlineWidth : 0,
+          borderColor: isGmail ? (scheme === 'dark' ? '#3A3A3C' : '#E0E0E0') : 'transparent',
         },
       ]}
       accessibilityRole="image"

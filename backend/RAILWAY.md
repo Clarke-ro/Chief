@@ -53,7 +53,31 @@ Railway service **Root Directory** = `backend`. Do not split repos unless the te
 | `CORS_ORIGINS` | Expo / web origins — include `chief://` for the mobile app |
 | Provider `*_CLIENT_ID` / `*_CLIENT_SECRET` | As needed (Microsoft optional) |
 
-## Google Tasks
+## Google OAuth (Gmail / Calendar / Tasks / Drive)
+
+Redirect URI to register on the Google Cloud OAuth client:
+
+`https://<railway-domain>/v1/integrations/oauth/google/callback`
+
+(Use the same host as `OAUTH_REDIRECT_BASE_URL` / `BETTER_AUTH_URL`.)
+
+### Allow any Google account (not only test users)
+
+While the OAuth consent screen is in **Testing**, only emails listed under **Test users** can connect. Anyone else sees Google’s “app has not completed Google verification” / access blocked screen.
+
+To open connect to any Google account:
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services** → **OAuth consent screen**
+2. Set **User type** to **External**
+3. Fill App name, support email, developer contact
+4. Add scopes Chief requests (see `google.adapter.ts`): Gmail modify, Calendar, Drive readonly, Tasks, plus `openid` / `email` / `profile`
+5. Enable APIs: Gmail, Google Calendar, Google Drive, Google Tasks
+6. Under **Publishing status**, click **Publish app** (moves from Testing → In production)
+7. Because Gmail / Drive / Calendar scopes are **sensitive/restricted**, Google will require a **verification** submission (privacy policy URL, demo video, justification) before unrestricted users can grant those scopes. Until verification completes, keep adding people as **Test users**, or use a Workspace internal app if the project is Internal-only.
+
+Short-term (dev / beta): stay in Testing and add every tester email under **Audience → Test users**.
+
+### Google Tasks
 
 Home task sync uses the Google Tasks API (`https://www.googleapis.com/auth/tasks`).
 

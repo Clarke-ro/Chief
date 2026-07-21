@@ -22,7 +22,7 @@ export function WelcomeScreen() {
   const iconFg = isLight ? '#FFFFFF' : colors.bg;
 
   return (
-    <OnboardingShell stepIndex={0} showBack={false} showSkip={false} centered={false}>
+    <OnboardingShell stepIndex={0} showBack={false} centered={false}>
       <View style={styles.screen}>
         <View style={styles.hero}>
           <View style={styles.brandRow}>

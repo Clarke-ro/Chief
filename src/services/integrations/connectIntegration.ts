@@ -48,6 +48,14 @@ function mapOAuthStartError(error: unknown): OAuthIntegrationResult {
     };
   }
   if (error instanceof ApiError && error.status === 400) {
+    const server = (error.serverMessage ?? error.message).toLowerCase();
+    if (server.includes('oauth') && server.includes('not configured')) {
+      return {
+        ok: false,
+        reason: 'failed',
+        message: 'This app is not configured on the server yet.',
+      };
+    }
     return {
       ok: false,
       reason: 'failed',

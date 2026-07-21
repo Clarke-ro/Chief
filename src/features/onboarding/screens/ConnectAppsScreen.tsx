@@ -97,14 +97,14 @@ export function ConnectAppsScreen() {
       const result = await connectIntegration(provider, workspaceId, {
         next: '/onboarding/connect',
       });
+      // Clear spinner before post-connect sync so a slow first sync never looks like a hung OAuth open.
+      setConnectingAppId(null);
       await queryClient.invalidateQueries({ queryKey: queryKeys.integrations(workspaceId) });
       if (result.ok) {
         if (workspaceId) {
-          try {
-            await syncRepository.runFirstConnection(workspaceId);
-          } catch {
+          void syncRepository.runFirstConnection(workspaceId).catch(() => {
             // Worker may still pick up the API onboarding enqueue.
-          }
+          });
         }
         void useWorkspaceStore.getState().refreshBrief();
         return;
@@ -124,35 +124,23 @@ export function ConnectAppsScreen() {
       stepIndex={2}
       centered={false}
       footer={
-        <View style={styles.footer}>
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Continue"
-            accessibilityState={{ disabled: !hasAny }}
-            activeOpacity={0.85}
-            disabled={!hasAny}
-            onPress={() => router.push('/onboarding/scan')}
-            style={[
-              styles.primaryBtn,
-              {
-                backgroundColor: ink,
-                opacity: hasAny ? 1 : 0.4,
-              },
-            ]}
-          >
-            <Text style={[styles.primaryLabel, { color: inkOn }]}>Continue</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            accessibilityRole="button"
-            accessibilityLabel="Skip for now"
-            activeOpacity={0.55}
-            onPress={() => router.push('/onboarding/scan')}
-            style={styles.skipBtn}
-          >
-            <Text style={[styles.skipLabel, { color: ink }]}>Skip for now</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Continue"
+          accessibilityState={{ disabled: !hasAny }}
+          activeOpacity={0.85}
+          disabled={!hasAny}
+          onPress={() => router.push('/onboarding/scan')}
+          style={[
+            styles.primaryBtn,
+            {
+              backgroundColor: ink,
+              opacity: hasAny ? 1 : 0.4,
+            },
+          ]}
+        >
+          <Text style={[styles.primaryLabel, { color: inkOn }]}>Continue</Text>
+        </TouchableOpacity>
       }
     >
       <ScrollView
@@ -275,10 +263,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  footer: {
-    width: '100%',
-    gap: spacing[12],
-  },
   primaryBtn: {
     width: '100%',
     minHeight: 52,
@@ -290,17 +274,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
     fontWeight: '600',
-  },
-  skipBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 44,
-    paddingVertical: spacing[8],
-  },
-  skipLabel: {
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '600',
-    textAlign: 'center',
   },
 });

@@ -102,7 +102,7 @@ export function AuthScreen() {
   };
 
   return (
-    <OnboardingShell stepIndex={1} centered={false} showSkip={false}>
+    <OnboardingShell stepIndex={1} centered={false}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
