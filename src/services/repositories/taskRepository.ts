@@ -20,7 +20,7 @@ const STATUSES = new Set<TaskStatus>(['ready', 'in_progress', 'waiting', 'done']
 const SECTIONS = new Set<TaskSectionKey>(['today', 'upcoming', 'waiting', 'completed']);
 
 function shouldUseMockFallback(): boolean {
-  return !usePreferencesStore.getState().onboardingComplete;
+  return !usePreferencesStore.getState().onboardingCompleted;
 }
 
 function isTask(value: unknown): value is Task {

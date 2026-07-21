@@ -66,7 +66,7 @@ function writeCached(items: DayPlanItem[], workspaceId?: string): void {
 }
 
 function shouldUseMockFallback(): boolean {
-  return !usePreferencesStore.getState().onboardingComplete;
+  return !usePreferencesStore.getState().onboardingCompleted;
 }
 
 function normalizeItem(raw: unknown): DayPlanItem | null {

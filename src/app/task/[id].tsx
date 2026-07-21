@@ -1,6 +1,7 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Clock } from 'lucide-react-native';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -11,7 +12,9 @@ import {
   Tag,
   platformLabels,
 } from '@/components/ui';
+import type { Task } from '@/features/tasks/types';
 import { TASK_STATUS_LABELS } from '@/features/tasks/types';
+import { useMountedRef } from '@/hooks/useMountedRef';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { taskRepository, workspaceNav } from '@/services';
 import { spacing, typography } from '@/theme';
@@ -40,8 +43,48 @@ export default function TaskDetailsScreen() {
   const id = paramId(params.id);
   const colors = useThemeColors();
   const insets = useSafeAreaInsets();
-  const task = id ? taskRepository.getById(id) : undefined;
+  const mounted = useMountedRef();
+  const [task, setTask] = useState<Task | undefined>(() =>
+    id ? taskRepository.getById(id) : undefined,
+  );
+  const [loading, setLoading] = useState(() => Boolean(id) && !task);
   const goBack = () => workspaceNav.back(() => workspaceNav.today());
+
+  useEffect(() => {
+    if (!id) {
+      setTask(undefined);
+      setLoading(false);
+      return;
+    }
+
+    const cached = taskRepository.getById(id);
+    if (cached) setTask(cached);
+    else setLoading(true);
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const live = await taskRepository.fetchById(id);
+        if (cancelled || !mounted.current) return;
+        setTask(live);
+      } finally {
+        if (!cancelled && mounted.current) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, mounted]);
+
+  if (loading && !task) {
+    return (
+      <View style={[styles.root, styles.centered, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
+        <Stack.Screen options={{ headerShown: false, gestureEnabled: true }} />
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
 
   if (!task) {
     return (
@@ -128,6 +171,10 @@ export default function TaskDetailsScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   nav: {
     paddingHorizontal: spacing[16],

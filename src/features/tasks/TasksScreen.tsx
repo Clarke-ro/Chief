@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SearchBar } from '@/components/ui';
+import { env } from '@/config/env';
 import { dispatchAction } from '@/features/actions';
 import { AddScheduleSheet } from '@/features/tasks/components/AddScheduleSheet';
 import { TimelineRow } from '@/features/tasks/components/TimelineRow';
@@ -47,6 +48,7 @@ export function TasksScreen() {
   const removeItem = useWorkspaceStore((s) => s.removeDayPlanItem);
   const setStatus = useWorkspaceStore((s) => s.setDayPlanStatus);
   const runDueSweep = useWorkspaceStore((s) => s.runDueSweep);
+  const refreshDayPlan = useWorkspaceStore((s) => s.refreshDayPlan);
   const resetToSeed = useWorkspaceStore((s) => s.resetDayPlan);
 
   const [query, setQuery] = useState('');
@@ -54,6 +56,12 @@ export function TasksScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState<DayPlanItem | null>(null);
+
+  // Live: cache-first paint, then refresh from API when Today mounts.
+  useEffect(() => {
+    if (!env.liveHomeBrief || !isTodayFocused) return;
+    void refreshDayPlan();
+  }, [isTodayFocused, refreshDayPlan]);
 
   // Due-time sweep only while Today is focused — avoids background JS work on other tabs
   useEffect(() => {
@@ -162,15 +170,22 @@ export function TasksScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await new Promise((r) => setTimeout(r, 500));
-    if (!mounted.current) return;
-    // Keep user-added items; only re-seed if the list is empty
-    if (useWorkspaceStore.getState().dayPlan.length === 0) {
-      resetToSeed();
+    try {
+      if (env.liveHomeBrief) {
+        await refreshDayPlan();
+      } else {
+        await new Promise((r) => setTimeout(r, 500));
+        if (!mounted.current) return;
+        // Mock mode: keep user-added items; only re-seed if empty
+        if (useWorkspaceStore.getState().dayPlan.length === 0) {
+          resetToSeed();
+        }
+      }
+      runDueSweep();
+    } finally {
+      if (mounted.current) setRefreshing(false);
     }
-    runDueSweep();
-    if (mounted.current) setRefreshing(false);
-  }, [mounted, resetToSeed, runDueSweep]);
+  }, [mounted, refreshDayPlan, resetToSeed, runDueSweep]);
 
   const toggleSearch = () => {
     setShowSearch((prev) => {
