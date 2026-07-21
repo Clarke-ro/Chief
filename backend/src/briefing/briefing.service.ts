@@ -18,7 +18,6 @@ import {
 } from './briefing.types';
 import {
   BRIEF_SECTION_ORDER,
-  buildActionReason,
   briefSectionFor,
   contextualOpenLabel,
   estimatedMinutesFor,
@@ -26,8 +25,7 @@ import {
   scoreCalendarEvent,
   scoreEmail,
   scoreTask,
-  synthesizeWorkCopy,
-  summarizeBodyAsBriefList,
+  synthesizeFocusNarrative,
   type BriefSection,
   type WorkKind,
 } from './relevance.scorer';
@@ -422,7 +420,7 @@ export class BriefingService {
     relevance: number,
   ): FocusItemDto {
     const platform = mapPlatform(task.platform, task.provider, 'notion');
-    const synthesized = synthesizeWorkCopy({
+    const narrative = synthesizeFocusNarrative({
       kind: 'task',
       title: task.title,
       snippet: task.description,
@@ -433,21 +431,14 @@ export class BriefingService {
       task.estimatedTime?.trim() ||
       (task.estimatedMinutes != null
         ? `${task.estimatedMinutes} min`
-        : estimatedMinutesFor(synthesized.workKind));
-    const openLabel = contextualOpenLabel(synthesized.workKind);
+        : estimatedMinutesFor(narrative.workKind));
+    const openLabel = contextualOpenLabel(narrative.workKind);
 
     return {
       id: task.id,
       platform,
-      title: shortFocusTitle(synthesized.headline),
-      reason: buildActionReason({
-        workKind: synthesized.workKind,
-        title: task.title,
-        snippet: task.description.trim() || task.details.trim() || null,
-        bodyText: task.details,
-        dueAt: task.dueAt,
-        estimatedTime,
-      }),
+      title: shortFocusTitle(narrative.headline),
+      reason: truncateJoin([narrative.reasonHint, `Est. ${estimatedTime}`], 88),
       estimatedTime,
       priority: priorityFromScore(relevance, task.priority),
       confidence: clamp01(Math.max(task.confidence ?? 0.7, relevance)),
@@ -457,17 +448,20 @@ export class BriefingService {
         { id: `${task.id}-open`, label: openLabel },
       ],
       urgencyLabel:
-        synthesized.workKind === 'deadline'
+        narrative.workKind === 'deadline'
           ? 'Deadline'
           : task.priority === TaskPriority.high
             ? 'High priority'
             : task.priority === TaskPriority.medium
               ? 'Today'
               : 'When ready',
-      whyImportant: synthesized.detail,
-      delayImpact:
-        'Leaving this open may push other commitments later in the day.',
-      aiRecommendation: recommendationForWorkKind(synthesized.workKind),
+      aboutTitle: narrative.aboutTitle,
+      aboutBody: narrative.aboutBody,
+      actionTitle: narrative.actionTitle,
+      actionBody: narrative.actionBody,
+      whyImportant: narrative.aboutBody,
+      delayImpact: narrative.actionBody,
+      aiRecommendation: narrative.recommendation,
     };
   }
 
@@ -485,28 +479,21 @@ export class BriefingService {
     relevance: number,
   ): FocusItemDto {
     const subject = email.subject?.trim() || 'Email thread';
-    const synthesized = synthesizeWorkCopy({
+    const narrative = synthesizeFocusNarrative({
       kind: 'email',
       title: subject,
       fromName: email.fromName,
       snippet: email.snippet,
       bodyText: email.bodyText,
     });
-    const estimatedTime = estimatedMinutesFor(synthesized.workKind);
-    const openLabel = contextualOpenLabel(synthesized.workKind);
+    const estimatedTime = estimatedMinutesFor(narrative.workKind);
+    const openLabel = contextualOpenLabel(narrative.workKind);
 
     return {
       id: `mail-${email.id}`,
       platform: mapPlatform('gmail', email.provider, 'gmail'),
-      title: shortFocusTitle(synthesized.headline),
-      reason: buildActionReason({
-        workKind: synthesized.workKind,
-        title: subject,
-        snippet: email.snippet,
-        bodyText: email.bodyText,
-        fromName: email.fromName,
-        estimatedTime,
-      }),
+      title: shortFocusTitle(narrative.headline),
+      reason: truncateJoin([narrative.reasonHint, `Est. ${estimatedTime}`], 88),
       estimatedTime,
       priority: priorityFromScore(relevance),
       confidence: clamp01(relevance),
@@ -515,10 +502,14 @@ export class BriefingService {
         { id: `${email.id}-ask`, label: 'Ask Chief' },
         { id: `${email.id}-open`, label: openLabel },
       ],
-      urgencyLabel: urgencyForWorkKind(synthesized.workKind, relevance),
-      whyImportant: synthesized.detail,
-      delayImpact: 'Ignoring this may miss a deadline or block someone waiting on you.',
-      aiRecommendation: recommendationForWorkKind(synthesized.workKind),
+      urgencyLabel: urgencyForWorkKind(narrative.workKind, relevance),
+      aboutTitle: narrative.aboutTitle,
+      aboutBody: narrative.aboutBody,
+      actionTitle: narrative.actionTitle,
+      actionBody: narrative.actionBody,
+      whyImportant: narrative.aboutBody,
+      delayImpact: narrative.actionBody,
+      aiRecommendation: narrative.recommendation,
     };
   }
 
@@ -533,37 +524,35 @@ export class BriefingService {
     },
     relevance: number,
   ): FocusItemDto {
-    const synthesized = synthesizeWorkCopy({
+    const narrative = synthesizeFocusNarrative({
       kind: 'event',
       title: event.title,
       startsAt: event.startsAt,
       snippet: event.description,
       bodyText: event.location,
     });
-    const estimatedTime = estimatedMinutesFor(synthesized.workKind);
+    const estimatedTime = estimatedMinutesFor(narrative.workKind);
     return {
       id: `event-${event.id}`,
       platform: mapPlatform('calendar', event.provider, 'calendar'),
-      title: shortFocusTitle(synthesized.headline),
-      reason: buildActionReason({
-        workKind: synthesized.workKind,
-        title: event.title,
-        snippet: event.description || event.location,
-        startsAt: event.startsAt,
-        estimatedTime,
-      }),
+      title: shortFocusTitle(narrative.headline),
+      reason: truncateJoin([narrative.reasonHint, `Est. ${estimatedTime}`], 88),
       estimatedTime,
       priority: priorityFromScore(relevance),
       confidence: clamp01(relevance),
       actions: [
         { id: `${event.id}-done`, label: 'Mark done', tone: 'accent' },
         { id: `${event.id}-ask`, label: 'Ask Chief' },
-        { id: `${event.id}-open`, label: contextualOpenLabel(synthesized.workKind) },
+        { id: `${event.id}-open`, label: contextualOpenLabel(narrative.workKind) },
       ],
       urgencyLabel: 'Meeting',
-      whyImportant: synthesized.detail,
-      delayImpact: 'Showing up unprepared wastes the meeting and follow-ups pile up.',
-      aiRecommendation: 'Skim notes and list 2–3 outcomes before it starts.',
+      aboutTitle: narrative.aboutTitle,
+      aboutBody: narrative.aboutBody,
+      actionTitle: narrative.actionTitle,
+      actionBody: narrative.actionBody,
+      whyImportant: narrative.aboutBody,
+      delayImpact: narrative.actionBody,
+      aiRecommendation: narrative.recommendation,
     };
   }
 
@@ -578,10 +567,10 @@ export class BriefingService {
       fromAddress: string | null;
       receivedAt: Date | null;
     },
-    relevance: number,
+    _relevance: number,
   ): BriefingSignalDto {
     const subject = email.subject?.trim() || 'Needs a look';
-    const synthesized = synthesizeWorkCopy({
+    const narrative = synthesizeFocusNarrative({
       kind: 'email',
       title: subject,
       fromName: email.fromName,
@@ -591,13 +580,9 @@ export class BriefingService {
     return {
       id: email.id,
       platform: mapPlatform('gmail', email.provider, 'gmail'),
-      section: briefSectionFor(synthesized.workKind),
-      title: synthesized.headline,
-      summary: summarizeBodyAsBriefList(
-        email.bodyText,
-        email.snippet,
-        synthesized.detail,
-      ),
+      section: briefSectionFor(narrative.workKind),
+      title: narrative.headline,
+      summary: narrative.briefBullets,
       timestamp: formatRelative(email.receivedAt),
     };
   }
@@ -611,7 +596,7 @@ export class BriefingService {
     endsAt: Date;
     location: string | null;
   }): BriefingSignalDto {
-    const synthesized = synthesizeWorkCopy({
+    const narrative = synthesizeFocusNarrative({
       kind: 'event',
       title: event.title,
       startsAt: event.startsAt,
@@ -626,13 +611,9 @@ export class BriefingService {
     return {
       id: event.id,
       platform: mapPlatform('calendar', event.provider, 'calendar'),
-      section: briefSectionFor(synthesized.workKind),
-      title: synthesized.headline,
-      summary: summarizeBodyAsBriefList(
-        event.description,
-        event.location,
-        synthesized.detail || `Starts ${time}`,
-      ),
+      section: briefSectionFor(narrative.workKind),
+      title: narrative.headline,
+      summary: narrative.briefBullets,
       timestamp: time,
     };
   }
@@ -707,6 +688,18 @@ function needsPresentationRefresh(brief: HomeBriefDto): boolean {
   ) {
     return true;
   }
+  // Older focus detail still used hardcoded delay copy / missing narrative titles.
+  if (
+    brief.focus.some(
+      (item) =>
+        !('aboutTitle' in item) ||
+        !item.aboutTitle ||
+        /Ignoring this may miss a deadline/i.test(item.delayImpact) ||
+        /Showing up unprepared wastes the meeting/i.test(item.delayImpact),
+    )
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -714,6 +707,12 @@ function shortFocusTitle(headline: string): string {
   const trimmed = headline.trim();
   if (trimmed.length <= 72) return trimmed;
   return `${trimmed.slice(0, 71)}…`;
+}
+
+function truncateJoin(parts: Array<string | null | undefined>, max: number): string {
+  const value = parts.filter(Boolean).join(' · ').replace(/\s+/g, ' ').trim();
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1)}…`;
 }
 
 function firstName(name?: string | null): string {
@@ -801,24 +800,5 @@ function urgencyForWorkKind(workKind: WorkKind, relevance: number): string {
       return 'Meeting';
     default:
       return relevance >= 0.7 ? 'Needs action' : 'Follow up';
-  }
-}
-
-function recommendationForWorkKind(workKind: WorkKind): string {
-  switch (workKind) {
-    case 'deadline':
-      return 'Confirm the deadline, then block time to finish.';
-    case 'invoice':
-      return 'Verify the amount and settle or escalate.';
-    case 'security':
-      return 'Confirm it was you — reset credentials if not.';
-    case 'career':
-      return 'Review requirements and schedule prep time.';
-    case 'approval':
-      return 'Decide approve / request changes, then reply.';
-    case 'document':
-      return 'Scan for decisions needed, then leave comments.';
-    default:
-      return 'Decide: reply, schedule, or delegate — then mark done.';
   }
 }

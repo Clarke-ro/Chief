@@ -20,10 +20,14 @@ export const homeBrief: HomeBrief = {
         { id: 'f1-merge', label: 'Merge', tone: 'accent' },
       ],
       urgencyLabel: 'Blocks deployment',
+      aboutTitle: 'Blocking release',
+      aboutBody:
+        'PR #182 is the last gate on payment-flow deployment. Staging is green and three teammates already approved.',
+      actionTitle: 'What to do',
+      actionBody: 'Review the diff, merge when satisfied, and confirm deploy starts.',
       whyImportant:
-        "This PR is blocking today's deployment. 3 teammates are waiting for your review. The customer demo at 2 PM depends on this release, and staging is already green — only your merge remains.",
-      delayImpact:
-        'Deployment will be delayed by ~1 day and may impact the customer demo. Engineering will stay blocked on payment-flow follow-ups until this lands.',
+        'PR #182 is the last gate on payment-flow deployment. Staging is green and three teammates already approved.',
+      delayImpact: 'Review the diff, merge when satisfied, and confirm deploy starts.',
       aiRecommendation: 'Review and merge this PR now.',
     },
     {
@@ -40,17 +44,21 @@ export const homeBrief: HomeBrief = {
         { id: 'f2-send', label: 'Send reply', tone: 'accent' },
       ],
       urgencyLabel: 'Same-day reply',
+      aboutTitle: 'Investor thread',
+      aboutBody:
+        'The investor thread expects a clear answer today. Your draft already covers runway, hiring, and the next demo.',
+      actionTitle: 'Send the reply',
+      actionBody: 'Review the draft once, send it, and clear the open loop.',
       whyImportant:
-        'The investor thread expects a clear answer today. Your draft already covers runway, hiring plan, and next demo — sending now keeps the conversation warm and avoids a weekend follow-up loop.',
-      delayImpact:
-        "Silence past EOD often reads as hesitation. You may lose scheduling momentum for next week's partner call and create another round of clarifying questions.",
+        'The investor thread expects a clear answer today. Your draft already covers runway, hiring, and the next demo.',
+      delayImpact: 'Review the draft once, send it, and clear the open loop.',
       aiRecommendation: 'Review the draft once, then send the reply.',
     },
     {
       id: 'f3',
       platform: 'calendar',
       title: 'Reschedule Sprint Planning',
-      reason: 'Conflict detected at 10:00 AM with customer demo prep.',
+      reason: 'Schedule conflict · Est. 5 min',
       estimatedTime: '5 min',
       priority: 'medium',
       confidence: 0.85,
@@ -60,17 +68,21 @@ export const homeBrief: HomeBrief = {
         { id: 'f3-find', label: 'Find time' },
       ],
       urgencyLabel: 'Schedule conflict',
+      aboutTitle: 'Calendar conflict',
+      aboutBody:
+        'Sprint Planning overlaps with customer demo prep. Leaving it unresolved creates a no-show or a weak demo.',
+      actionTitle: 'Resolve the conflict',
+      actionBody: 'Move Sprint Planning to an open slot and notify attendees.',
       whyImportant:
-        "Sprint Planning overlaps with customer demo prep. Moving it protects demo quality while keeping the team aligned before tomorrow's standup. Two alternate slots already work for most attendees.",
-      delayImpact:
-        'If left unresolved, people will show up to a conflicted meeting or skip planning entirely — both create confusion about sprint commitments.',
+        'Sprint Planning overlaps with customer demo prep. Leaving it unresolved creates a no-show or a weak demo.',
+      delayImpact: 'Move Sprint Planning to an open slot and notify attendees.',
       aiRecommendation: 'Move Sprint Planning to 3:30 PM today.',
     },
     {
       id: 'f4',
       platform: 'slack',
       title: 'Decide empty-state direction',
-      reason: 'Engineering is blocked until Maya gets your call.',
+      reason: 'Waiting on your decision · Est. 8 min',
       estimatedTime: '8 min',
       priority: 'medium',
       confidence: 0.88,
@@ -80,10 +92,14 @@ export const homeBrief: HomeBrief = {
         { id: 'f4-decide', label: 'Decide', tone: 'accent' },
       ],
       urgencyLabel: 'Blocks engineering',
+      aboutTitle: 'Design decision needed',
+      aboutBody:
+        'Maya and engineering are blocked on illustration-led vs copy-first empty states.',
+      actionTitle: 'Make the call',
+      actionBody: 'Pick a direction and reply in #design so polish can finish tonight.',
       whyImportant:
-        "Design and engineering are waiting on a single product call: illustration-led empty states vs. copy-first. Your decision unblocks Maya's polish pass and tonight's staging cut.",
-      delayImpact:
-        'Empty-state work stays parked, and the release branch ships with placeholders that will need a follow-up PR next week.',
+        'Maya and engineering are blocked on illustration-led vs copy-first empty states.',
+      delayImpact: 'Pick a direction and reply in #design so polish can finish tonight.',
       aiRecommendation: 'Pick copy-first empty states and reply in #design.',
     },
   ],

@@ -224,19 +224,43 @@ type SynthesisInput = {
   now?: Date;
 };
 
+export type FocusNarrative = {
+  headline: string;
+  workKind: WorkKind;
+  /** Compact Focus subtitle (ellipsis-friendly). */
+  reasonHint: string;
+  /** Brief expand bullets — Chief-written, never raw email lines. */
+  briefBullets: string;
+  /** Focus detail: what this is about. */
+  aboutTitle: string;
+  aboutBody: string;
+  /** Focus detail: what the user should do. */
+  actionTitle: string;
+  actionBody: string;
+  recommendation: string;
+};
+
 /**
  * Synthesize Chief-of-Staff copy from workspace signals.
- * Imperative, specific, and outcome-led — never a raw subject dump
- * and never a blanket “Respond to…” wrapper.
+ * Imperative headlines + narrative sections — never dump email body text.
  */
 export function synthesizeWorkCopy(input: SynthesisInput): {
   headline: string;
   detail: string;
   workKind: WorkKind;
 } {
+  const narrative = synthesizeFocusNarrative(input);
+  return {
+    headline: narrative.headline,
+    detail: narrative.aboutBody,
+    workKind: narrative.workKind,
+  };
+}
+
+/** Full Focus + Brief narrative for one workspace signal. */
+export function synthesizeFocusNarrative(input: SynthesisInput): FocusNarrative {
   const now = input.now ?? new Date();
   const raw = stripReFwd(input.title.trim() || 'Untitled');
-  const detailSource = cleanDetailText(input.bodyText || input.snippet || '');
   const blob = `${raw} ${input.snippet ?? ''} ${input.bodyText ?? ''}`;
   const workKind = classifyWorkKind({
     kind: input.kind,
@@ -247,20 +271,34 @@ export function synthesizeWorkCopy(input: SynthesisInput): {
   const who = cleanSenderName(input.fromName);
   const brand = extractBrand(blob) || who;
   const topic = shortSubject(raw);
+  const facts = extractSignalFacts(blob);
   const deadlineHint = input.dueAt
     ? formatRelativeDeadline(input.dueAt, now)
-    : inferDeadlineHint(raw, input.snippet);
+    : inferDeadlineHint(raw, input.snippet) || facts.relativeDeadline;
 
   let headline: string;
-  let detail: string;
+  let aboutTitle: string;
+  let aboutBody: string;
+  let actionTitle: string;
+  let actionBody: string;
+  let recommendation: string;
+  let reasonHint: string;
+  const bullets: string[] = [];
 
   if (input.kind === 'task') {
     headline = ACTION_VERBS.test(raw) ? raw : `Complete ${topic}`;
-    detail =
-      detailSource ||
-      (input.dueAt
-        ? `Due ${formatRelativeDeadline(input.dueAt, now)} — finish this before it blocks the rest of your day.`
-        : 'Move this forward in your next focused block.');
+    aboutTitle = 'On your task list';
+    aboutBody = input.dueAt
+      ? `This is actionable work due ${formatRelativeDeadline(input.dueAt, now)}. Clearing it keeps the rest of your day from stacking up.`
+      : 'This is actionable work on your list that deserves a focused block today.';
+    actionTitle = 'What to do';
+    actionBody = 'Open the task, finish the next concrete step, then mark it done in Chief.';
+    recommendation = 'Start this in your next focused block.';
+    reasonHint = input.dueAt
+      ? `Deadline: ${formatRelativeDeadline(input.dueAt, now)}`
+      : 'Actionable today';
+    bullets.push('Finish the next concrete step on this task');
+    bullets.push('Mark it done once the outcome is clear');
   } else if (input.kind === 'event' || workKind === 'meeting') {
     const when = input.startsAt
       ? input.startsAt.toLocaleTimeString('en-US', {
@@ -273,182 +311,255 @@ export function synthesizeWorkCopy(input: SynthesisInput): {
     headline = when
       ? `Prepare for your ${when} meeting — ${clean}`
       : `Prepare for ${clean}`;
-    detail =
-      detailSource ||
-      'Skim notes and list 2–3 outcomes so you walk in ready to decide.';
+    aboutTitle = 'Upcoming meeting';
+    aboutBody = when
+      ? `You have “${clean}” at ${when}. Showing up prepared protects the agenda and follow-ups.`
+      : `You have “${clean}” coming up. Showing up prepared protects the agenda and follow-ups.`;
+    actionTitle = 'How to prepare';
+    actionBody =
+      'Skim related notes, list 2–3 outcomes you want, and arrive with one clear ask.';
+    recommendation = 'Block 10–15 minutes before it starts for prep.';
+    reasonHint = when ? `When: ${when}` : 'Walk in prepared';
+    bullets.push(when ? `Meeting starts at ${when}` : 'Meeting is on your calendar');
+    bullets.push('List 2–3 outcomes before you join');
+    if (facts.location) bullets.push(`Location: ${facts.location}`);
   } else if (/\bbuild\s*week\b/i.test(blob) || /\bhackathon\b/i.test(blob) || /\bdevpost\b/i.test(blob)) {
     headline = deadlineHint
       ? `Submit your Build Week project before the deadline ${deadlineHint === 'Today' ? 'today' : deadlineHint}`
       : 'Submit your Build Week project before the deadline';
-    detail =
-      detailSource ||
-      'Confirm submission requirements, share anything reviewers need, and upload demo materials early.';
+    aboutTitle = 'Build Week deadline';
+    aboutBody =
+      'Your OpenAI / Devpost Build Week submission is time-sensitive. Late uploads risk missing judging or demo slots.';
+    actionTitle = 'Submission checklist';
+    actionBody =
+      'Confirm the project runs as required, share anything reviewers need, and upload demo materials early to avoid rendering delays.';
+    recommendation = 'Ship the submission first, then polish secondary assets.';
+    reasonHint = deadlineHint ? `Deadline: ${deadlineHint}` : 'Time-sensitive';
+    bullets.push('Confirm the build runs against the required models');
+    bullets.push('Share the private repo with the reviewers listed in the brief');
+    bullets.push('Upload the architecture demo early to avoid render delays');
   } else if (workKind === 'invoice' || /\b(billing|payment|subscription|charge|wallet|top[- ]?up)\b/i.test(blob)) {
     const payee = brand || 'this subscription';
+    const amount = facts.amount;
     if (/\b(top[- ]?up|wallet|balance)\b/i.test(blob)) {
       headline = `Top up your ${payee} wallet so the recurring charge can clear`;
-      detail =
-        detailSource ||
-        'Keep enough balance to avoid card suspension or failed renewals.';
+      aboutTitle = 'Wallet balance warning';
+      aboutBody = amount
+        ? `${payee} needs enough balance to cover a ${amount} charge. Running low can suspend the card or fail renewals.`
+        : `${payee} is warning that your wallet balance may not cover the next charge.`;
+      actionTitle = 'What to do';
+      actionBody = 'Top up the wallet now and confirm the baseline balance stays above the minimum.';
+      recommendation = 'Fund the wallet before the next billing attempt.';
+      reasonHint = amount ? `${amount} due` : 'Top-up needed';
+      bullets.push(amount ? `Cover the ${amount} recurring charge` : 'Cover the upcoming recurring charge');
+      bullets.push('Keep balance above the stated minimum to avoid suspension');
     } else if (
       /\b(failed|declined|couldn't|could not|update.*(card|payment)|payment method|billing problem)\b/i.test(
         blob,
       )
     ) {
       headline = `Update your payment method for ${payee} to resolve the billing problem`;
-      detail =
-        detailSource ||
-        'Fix the failed charge promptly to avoid interruption or account limits.';
+      aboutTitle = 'Failed payment';
+      aboutBody = amount
+        ? `${payee} could not collect ${amount}. Until this is fixed, the subscription can lapse or features can lock.`
+        : `${payee} reported a billing problem with your payment method.`;
+      actionTitle = 'Fix billing';
+      actionBody =
+        'Update the card on file, retry the charge, and confirm the account shows active again.';
+      recommendation = 'Resolve billing before the grace window closes.';
+      reasonHint = 'Payment required';
+      bullets.push(amount ? `Failed charge: ${amount}` : 'A recurring charge failed');
+      bullets.push(`Update the payment method for ${payee}`);
+      bullets.push('Confirm the subscription is active after retry');
     } else {
       headline = `Resolve the ${payee} billing issue before service is interrupted`;
-      detail =
-        detailSource ||
-        'Verify the amount and settle or escalate if the charge looks wrong.';
+      aboutTitle = 'Billing needs attention';
+      aboutBody = `${payee} sent a billing notice that needs a decision — pay, update method, or dispute.`;
+      actionTitle = 'What to do';
+      actionBody = 'Verify the amount, settle or escalate if it looks wrong, then confirm status.';
+      recommendation = 'Clear billing today so service is not interrupted.';
+      reasonHint = 'Billing issue';
+      bullets.push(`Review the ${payee} billing notice`);
+      bullets.push(amount ? `Confirm the ${amount} charge` : 'Confirm the charged amount');
+      bullets.push('Pay, update method, or escalate');
     }
   } else if (workKind === 'security') {
-    const place = blob.match(
-      /\b(?:from|in)\s+([A-Z][a-zA-Z]+(?:,\s*[A-Z][a-zA-Z]+)?)/,
-    )?.[1];
+    const place = facts.place;
     const account = brand || 'your account';
     if (/\b(oauth|third[- ]party|authorization|authori[sz]e)\b/i.test(blob)) {
       headline = `Verify the authorization of the third-party app on ${account}`;
-      detail =
-        detailSource ||
-        'Confirm you intended this access — revoke it if the app looks unfamiliar.';
-    } else if (place) {
-      headline = `Review unrecognized access on ${account} from ${place}`;
-      detail =
-        detailSource ||
-        'Confirm this was you — if not, revoke the session and reset credentials immediately.';
+      aboutTitle = 'New app authorization';
+      aboutBody = `${account} reports a third-party OAuth authorization. If you did not approve it, treat it as unauthorized access.`;
+      actionTitle = 'Verify access';
+      actionBody =
+        'Open the security settings, confirm the app name, and revoke access if it looks unfamiliar.';
+      recommendation = 'Revoke first if anything looks off — you can re-authorize later.';
+      reasonHint = 'Security';
+      bullets.push(`Third-party access was requested on ${account}`);
+      bullets.push('Confirm you intended this authorization');
+      bullets.push('Revoke immediately if the app is unfamiliar');
     } else {
-      headline = `Review the security alert on ${account}`;
-      detail =
-        detailSource ||
-        'Confirm this was you — if not, revoke the session and reset credentials immediately.';
+      headline = place
+        ? `Review unrecognized access on ${account} from ${place}`
+        : `Review the security alert on ${account}`;
+      aboutTitle = 'Security alert';
+      aboutBody = place
+        ? `${account} flagged unrecognized access from ${place}. Confirm it was you before leaving the session open.`
+        : `${account} flagged a security event that needs your confirmation.`;
+      actionTitle = 'Secure the account';
+      actionBody =
+        'Confirm the login if it was you. If not, revoke the session, reset the password, and review connected devices.';
+      recommendation = 'Treat unknown logins as urgent — revoke first, investigate second.';
+      reasonHint = 'Confirm this was you';
+      bullets.push(place ? `Unrecognized access from ${place}` : 'Unrecognized access was detected');
+      bullets.push('Confirm it was you or revoke the session');
+      bullets.push('Reset credentials if the activity was not yours');
     }
   } else if (workKind === 'career') {
     const org = brand || 'the recruitment team';
     if (/\binterview\b/i.test(blob)) {
       headline = `Prepare for your interview with ${org}`;
-      detail =
-        detailSource ||
-        'Review the role requirements and block prep time before the conversation.';
+      aboutTitle = 'Interview coming up';
+      aboutBody = `${org} moved your application to an interview stage. Prep now while context is fresh.`;
+      actionTitle = 'How to prepare';
+      actionBody =
+        'Review the role requirements, prep 2–3 examples, and confirm logistics for the interview.';
+      recommendation = 'Block prep time on your calendar today.';
+      reasonHint = 'Career';
+      bullets.push(`Interview step with ${org}`);
+      bullets.push('Review role requirements and prep examples');
+      bullets.push('Confirm time and format');
     } else if (/\b(receipt|received|confirmed|missing)\b/i.test(blob)) {
       headline = `${org} confirmed receipt — track next steps on your application`;
-      detail =
-        detailSource ||
-        'Watch for assessment results or follow-up requests so nothing stalls.';
-    } else if (/\b(survey|feedback)\b/i.test(blob)) {
-      headline = `Complete the optional assessment survey from ${org}`;
-      detail = detailSource || 'A short survey helps close the loop on your application experience.';
+      aboutTitle = 'Application update';
+      aboutBody = `${org} acknowledged materials on your application. The next signal is usually assessment results or a follow-up ask.`;
+      actionTitle = 'Stay ready';
+      actionBody =
+        'Watch for results or requests, and complete any optional survey so the loop stays warm.';
+      recommendation = 'No panic move — just keep the thread monitored.';
+      reasonHint = 'Career update';
+      bullets.push(`${org} confirmed receipt of your materials`);
+      bullets.push('Watch for assessment results or follow-up asks');
+      if (/\bsurvey\b/i.test(blob)) bullets.push('Optional survey is available if you want to close the loop');
     } else {
       headline = `Complete the assessment or application step for ${org}`;
-      detail =
-        detailSource ||
-        'Review requirements and schedule focused time to finish while momentum is high.';
+      aboutTitle = 'Career next step';
+      aboutBody = `${org} has an open assessment or application step that still needs your attention.`;
+      actionTitle = 'What to do';
+      actionBody =
+        'Open the prompt, schedule focused time, and submit while momentum is high.';
+      recommendation = 'Finish the assessment in one sitting if possible.';
+      reasonHint = 'Career';
+      bullets.push(`Open assessment / application step with ${org}`);
+      bullets.push('Schedule focused time to complete it');
+      bullets.push('Submit before the window closes');
     }
   } else if (workKind === 'approval') {
     headline = brand
       ? `Review and approve the request from ${brand}`
       : `Review and approve: ${topic}`;
-    detail =
-      detailSource ||
-      'Decide approve / request changes, then reply so others are not blocked.';
+    aboutTitle = 'Approval needed';
+    aboutBody = brand
+      ? `${brand} is blocked until you approve or request changes.`
+      : 'Someone is waiting on your approval before they can move forward.';
+    actionTitle = 'Make the call';
+    actionBody = 'Review the ask, approve or request changes, then reply so others unblock.';
+    recommendation = 'Decide in one pass — approve, change request, or delegate.';
+    reasonHint = 'Waiting on your decision';
+    bullets.push(brand ? `Approval requested by ${brand}` : 'An approval is waiting on you');
+    bullets.push('Approve, request changes, or delegate');
+    bullets.push('Reply once so the thread is unblocked');
   } else if (workKind === 'deadline') {
     headline = deadlineHint
       ? `Finish “${topic}” — due ${deadlineHint}`
       : `Finish “${topic}” before the deadline`;
-    detail =
-      detailSource ||
-      'Confirm the deliverable and block time now while you still have runway.';
+    aboutTitle = 'Deadline approaching';
+    aboutBody = deadlineHint
+      ? `“${topic}” is due ${deadlineHint}. Waiting burns the remaining runway.`
+      : `“${topic}” is time-sensitive and still open.`;
+    actionTitle = 'Close the loop';
+    actionBody =
+      'Confirm the deliverable, block time now, and submit before the cutoff.';
+    recommendation = 'Protect a focused block today for this deliverable.';
+    reasonHint = deadlineHint ? `Deadline: ${deadlineHint}` : 'Time-sensitive';
+    bullets.push(deadlineHint ? `Due ${deadlineHint}` : 'Deadline is approaching');
+    bullets.push('Confirm the exact deliverable');
+    bullets.push('Block time and submit before cutoff');
   } else if (workKind === 'document') {
     headline = `Review “${topic}” and leave clear decisions`;
-    detail =
-      detailSource ||
-      'Scan for asks that need your call, then comment or reply once.';
+    aboutTitle = 'Document review';
+    aboutBody = `A document or proposal (“${topic}”) needs your read and a clear decision.`;
+    actionTitle = 'Review path';
+    actionBody =
+      'Scan for asks that need your call, leave comments, then reply once with the decision.';
+    recommendation = 'Leave decisions in-line so the owner can proceed.';
+    reasonHint = 'Review needed';
+    bullets.push(`Review “${topic}”`);
+    bullets.push('Leave comments on open questions');
+    bullets.push('Send one clear decision reply');
   } else if (/\b(delet(?:e|ion)|permanent|scheduled.*remov)/i.test(blob)) {
     headline = brand
       ? `Cancel the scheduled deletion on ${brand} if this was unintended`
       : `Cancel the scheduled deletion if this was unintended — ${topic}`;
-    detail =
-      detailSource ||
-      'Log in and reverse the queue before the retention window closes.';
+    aboutTitle = 'Scheduled deletion';
+    aboutBody = brand
+      ? `${brand} queued a deletion. If that was unintended, you still have a short window to reverse it.`
+      : 'A deletion was scheduled. If unintended, reverse it before the window closes.';
+    actionTitle = 'Reverse if needed';
+    actionBody =
+      'Open the project page, cancel the deletion queue, and confirm resources are still active.';
+    recommendation = 'Act before the retention window expires.';
+    reasonHint = 'Time-sensitive';
+    bullets.push('A deletion was scheduled');
+    bullets.push('Cancel it if this was unintended');
+    bullets.push('Confirm resources remain active');
   } else {
-    // Generic mail: pick a verb from content — never default everything to “Respond to”.
-    const crafted = craftGenericHeadline({
-      topic,
-      brand,
-      who,
-      raw,
-      blob,
-      detailSource,
-    });
+    const crafted = craftGenericHeadline({ topic, brand, who, raw, blob });
     headline = crafted.headline;
-    detail = crafted.detail;
+    aboutTitle = crafted.aboutTitle;
+    aboutBody = crafted.aboutBody;
+    actionTitle = crafted.actionTitle;
+    actionBody = crafted.actionBody;
+    recommendation = crafted.recommendation;
+    reasonHint = crafted.reasonHint;
+    bullets.push(...crafted.bullets);
+  }
+
+  while (bullets.length < 2) {
+    bullets.push('Decide the next step, then clear it from your plate');
   }
 
   return {
     headline: truncate(collapseWhitespace(headline), 140),
-    detail: truncate(collapseWhitespace(detail), 220),
     workKind,
+    reasonHint: truncate(collapseWhitespace(reasonHint), 48),
+    briefBullets: bullets
+      .slice(0, 4)
+      .map((line) => `• ${truncate(collapseWhitespace(line), 110)}`)
+      .join('\n'),
+    aboutTitle,
+    aboutBody: truncate(collapseWhitespace(aboutBody), 280),
+    actionTitle,
+    actionBody: truncate(collapseWhitespace(actionBody), 280),
+    recommendation: truncate(collapseWhitespace(recommendation), 160),
   };
 }
 
-/**
- * Short bullet list from email/event body for Brief expand UI.
- * Keeps 2–4 crisp blocks — not a raw dump.
- */
+/** @deprecated Prefer synthesizeFocusNarrative / synthesizeBriefBullets. */
 export function summarizeBodyAsBriefList(
-  bodyText?: string | null,
-  snippet?: string | null,
+  _bodyText?: string | null,
+  _snippet?: string | null,
   fallback?: string | null,
 ): string {
-  const raw = `${bodyText ?? ''}\n${snippet ?? ''}`.trim();
-  const candidates: string[] = [];
-
-  if (raw) {
-    const normalized = raw
-      .replace(/\r/g, '')
-      .replace(/https?:\/\/\S+/gi, '')
-      .replace(/\b(unsubscribe|view in browser|privacy policy|manage preferences)\b.*$/gim, '');
-
-    for (const line of normalized.split(/\n+/)) {
-      const cleaned = collapseWhitespace(
-        line.replace(/^[•\-\*\u2022\d]+[.)]\s*/, '').replace(/[<>]/g, ' '),
-      );
-      if (isUsefulBriefLine(cleaned)) candidates.push(truncate(cleaned, 110));
-      if (candidates.length >= 4) break;
-    }
-
-    if (candidates.length < 2) {
-      const sentences = normalized
-        .split(/(?<=[.!?])\s+/)
-        .map((s) => collapseWhitespace(s.replace(/[<>]/g, ' ')))
-        .filter(isUsefulBriefLine);
-      for (const sentence of sentences) {
-        if (candidates.some((c) => c === sentence || c.includes(sentence.slice(0, 40)))) continue;
-        candidates.push(truncate(sentence, 110));
-        if (candidates.length >= 4) break;
-      }
-    }
-  }
-
-  if (candidates.length === 0 && fallback?.trim()) {
-    candidates.push(truncate(collapseWhitespace(fallback), 110));
-  }
-
-  if (candidates.length === 0) {
-    return '• Skim for the ask, then decide reply / schedule / done';
-  }
-
-  return candidates.map((line) => `• ${line}`).join('\n');
+  if (fallback?.includes('•')) return fallback;
+  return synthesizeFocusNarrative({
+    kind: 'email',
+    title: fallback || 'Update',
+  }).briefBullets;
 }
 
-function isUsefulBriefLine(value: string): boolean {
-  if (value.length < 28) return false;
-  if (/^(hi|hello|dear|thanks|thank you|best|regards|sent from)\b/i.test(value)) return false;
-  if (/^[\W\d_]+$/.test(value)) return false;
-  return true;
+export function synthesizeBriefBullets(input: SynthesisInput): string {
+  return synthesizeFocusNarrative(input).briefBullets;
 }
 
 function craftGenericHeadline(input: {
@@ -457,20 +568,35 @@ function craftGenericHeadline(input: {
   who: string | null;
   raw: string;
   blob: string;
-  detailSource: string;
-}): { headline: string; detail: string } {
-  const { topic, brand, who, raw, blob, detailSource } = input;
+}): {
+  headline: string;
+  aboutTitle: string;
+  aboutBody: string;
+  actionTitle: string;
+  actionBody: string;
+  recommendation: string;
+  reasonHint: string;
+  bullets: string[];
+} {
+  const { topic, brand, who, raw, blob } = input;
   const actor = brand || who;
 
-  // Subject already imperative — keep it, lightly cleaned.
   if (ACTION_VERBS.test(raw)) {
     return {
       headline: topic,
-      detail:
-        detailSource ||
-        (actor
-          ? `From ${actor} — take the next step and clear it.`
-          : 'Take the next step and clear it from your plate.'),
+      aboutTitle: 'Needs your attention',
+      aboutBody: actor
+        ? `${actor} surfaced “${topic}”. It already reads like an action — confirm the outcome and close it.`
+        : `“${topic}” already reads like an action. Confirm the outcome and close it.`,
+      actionTitle: 'What to do',
+      actionBody: 'Take the next concrete step, then mark it done so it leaves your plate.',
+      recommendation: 'Finish the obvious next step in one pass.',
+      reasonHint: 'Actionable',
+      bullets: [
+        `Carry out: ${topic}`,
+        actor ? `From ${actor}` : 'Confirm the expected outcome',
+        'Mark done when finished',
+      ],
     };
   }
 
@@ -479,7 +605,19 @@ function craftGenericHeadline(input: {
       headline: actor
         ? `Review new opportunities from ${actor}`
         : `Review new opportunities — ${topic}`,
-      detail: detailSource || 'Decide which leads are worth pursuing, then reply or dismiss.',
+      aboutTitle: 'New opportunities',
+      aboutBody: actor
+        ? `${actor} shared new leads or opportunities. Decide which are worth pursuing before they go stale.`
+        : 'New leads or opportunities arrived. Decide which are worth pursuing before they go stale.',
+      actionTitle: 'Triage',
+      actionBody: 'Skim the list, shortlist what fits, and reply or dismiss the rest.',
+      recommendation: 'Triage quickly — pursue, defer, or dismiss.',
+      reasonHint: 'Review leads',
+      bullets: [
+        actor ? `New opportunities from ${actor}` : 'New opportunities arrived',
+        'Shortlist what is worth pursuing',
+        'Reply or dismiss the rest',
+      ],
     };
   }
 
@@ -488,7 +626,19 @@ function craftGenericHeadline(input: {
       headline: actor
         ? `Note the confirmation from ${actor} and track any follow-ups`
         : `Note the confirmation on “${topic}” and track follow-ups`,
-      detail: detailSource || 'No urgent action unless a next step is requested.',
+      aboutTitle: 'Confirmation received',
+      aboutBody: actor
+        ? `${actor} confirmed something on “${topic}”. No crisis — just keep an eye on follow-ups.`
+        : `A confirmation landed on “${topic}”. Watch for any follow-up ask.`,
+      actionTitle: 'Light touch',
+      actionBody: 'File it mentally, check whether a reply is needed, otherwise let it ride.',
+      recommendation: 'Only act if a next step is explicitly requested.',
+      reasonHint: 'FYI',
+      bullets: [
+        actor ? `Confirmation from ${actor}` : 'Confirmation received',
+        'Check whether a reply is required',
+        'Track any follow-up ask',
+      ],
     };
   }
 
@@ -497,7 +647,19 @@ function craftGenericHeadline(input: {
       headline: actor
         ? `Act on the reminder from ${actor}: ${topic}`
         : `Act on this reminder: ${topic}`,
-      detail: detailSource || 'Handle it in your next open block so it does not slip.',
+      aboutTitle: 'Reminder',
+      aboutBody: actor
+        ? `${actor} sent a reminder about “${topic}”. Handle it before it slips again.`
+        : `A reminder about “${topic}” is still open.`,
+      actionTitle: 'Clear the reminder',
+      actionBody: 'Do the asked step in your next open block, then confirm it is done.',
+      recommendation: 'Handle this before picking up new work.',
+      reasonHint: 'Reminder',
+      bullets: [
+        actor ? `Reminder from ${actor}` : 'Open reminder',
+        `About: ${topic}`,
+        'Complete it in your next open block',
+      ],
     };
   }
 
@@ -506,7 +668,19 @@ function craftGenericHeadline(input: {
       headline: actor
         ? `Check the latest update from ${actor}`
         : `Check the latest update on “${topic}”`,
-      detail: detailSource || 'Skim for anything that changes your plan or needs a reply.',
+      aboutTitle: 'Status update',
+      aboutBody: actor
+        ? `${actor} published an update on “${topic}”. Skim for anything that changes your plan.`
+        : `There is an update on “${topic}” that may change your plan.`,
+      actionTitle: 'Skim for impact',
+      actionBody: 'Check whether you need to reply, adjust priorities, or simply acknowledge.',
+      recommendation: 'Skim once; only escalate if it blocks you.',
+      reasonHint: 'Update',
+      bullets: [
+        actor ? `Update from ${actor}` : 'New update available',
+        'Skim for anything that changes your plan',
+        'Reply only if an ask is present',
+      ],
     };
   }
 
@@ -515,7 +689,19 @@ function craftGenericHeadline(input: {
       headline: actor
         ? `Decide on the invite from ${actor}`
         : `Decide on this invite: ${topic}`,
-      detail: detailSource || 'Accept, decline, or propose a new time — then move on.',
+      aboutTitle: 'Invitation',
+      aboutBody: actor
+        ? `${actor} invited you to “${topic}”. Accept, decline, or propose another time.`
+        : `You were invited to “${topic}”. Accept, decline, or propose another time.`,
+      actionTitle: 'RSVP',
+      actionBody: 'Check your calendar, decide, and respond so the organizer can plan.',
+      recommendation: 'RSVP today while the slot is still open.',
+      reasonHint: 'RSVP',
+      bullets: [
+        actor ? `Invite from ${actor}` : 'Open invitation',
+        `About: ${topic}`,
+        'Accept, decline, or propose a new time',
+      ],
     };
   }
 
@@ -525,37 +711,80 @@ function craftGenericHeadline(input: {
     )
   ) {
     return {
-      headline: actor
-        ? `Reply to ${actor} about ${topic}`
-        : `Reply about ${topic}`,
-      detail:
-        detailSource ||
-        'They are waiting on an answer — reply, schedule, or delegate.',
+      headline: actor ? `Reply to ${actor} about ${topic}` : `Reply about ${topic}`,
+      aboutTitle: 'Someone is waiting',
+      aboutBody: actor
+        ? `${actor} is waiting on an answer about “${topic}”.`
+        : `Someone is waiting on an answer about “${topic}”.`,
+      actionTitle: 'Reply path',
+      actionBody: 'Reply, schedule a time, or delegate — then clear the open loop.',
+      recommendation: 'Answer in one short message if you can.',
+      reasonHint: 'Reply needed',
+      bullets: [
+        actor ? `${actor} asked about “${topic}”` : `A reply is needed on “${topic}”`,
+        'Reply, schedule, or delegate',
+        'Clear the open loop afterward',
+      ],
     };
   }
 
   if (/\b(report|criteria|assignment|project report|evaluation)\b/i.test(blob)) {
     return {
       headline: `Prepare “${topic}” and review the evaluation criteria`,
-      detail: detailSource || 'Outline the deliverable and confirm what reviewers expect.',
-    };
-  }
-
-  // Prefer outcome language over “Respond to {sender}”.
-  if (actor) {
-    return {
-      headline: `Review “${topic}” from ${actor} and decide the next step`,
-      detail:
-        detailSource ||
-        'Skim for asks, then reply, schedule, or mark done.',
+      aboutTitle: 'Academic / project work',
+      aboutBody: `“${topic}” needs preparation against evaluation criteria before you submit.`,
+      actionTitle: 'Prep the deliverable',
+      actionBody: 'Outline the report, review criteria, and block time to draft.',
+      recommendation: 'Start with criteria so the draft hits the rubric.',
+      reasonHint: 'Prep needed',
+      bullets: [
+        `Prepare “${topic}”`,
+        'Review evaluation criteria',
+        'Block time to draft and submit',
+      ],
     };
   }
 
   return {
-    headline: `Review “${topic}” and decide the next step`,
-    detail:
-      detailSource ||
-      'Turn this into a clear action so it does not linger as an open loop.',
+    headline: actor
+      ? `Review “${topic}” from ${actor} and decide the next step`
+      : `Review “${topic}” and decide the next step`,
+    aboutTitle: 'Needs a decision',
+    aboutBody: actor
+      ? `${actor} sent “${topic}”. Decide whether this is reply, schedule, or done.`
+      : `“${topic}” needs a decision: reply, schedule, or clear.`,
+    actionTitle: 'What to do',
+    actionBody: 'Skim for the ask, choose the next step, and close the loop.',
+    recommendation: 'One decision clears this from Top Priority.',
+    reasonHint: 'Decide next step',
+    bullets: [
+      actor ? `From ${actor}: “${topic}”` : `About “${topic}”`,
+      'Identify the ask',
+      'Reply, schedule, or mark done',
+    ],
+  };
+}
+
+function extractSignalFacts(blob: string): {
+  amount: string | null;
+  place: string | null;
+  location: string | null;
+  relativeDeadline: string | null;
+} {
+  const amount =
+    blob.match(/\$\s?\d+(?:,\d{3})*(?:\.\d{2})?(?:\s*(?:USD|usd))?/)?.[0]?.replace(/\s+/g, '') ??
+    null;
+  const place =
+    blob.match(
+      /\b(?:from|in)\s+([A-Z][a-zA-Z]+(?:,\s*[A-Z][a-zA-Z]+)?)/,
+    )?.[1] ?? null;
+  const location =
+    blob.match(/\b(?:at|location[:\s]+)([A-Za-z0-9 .,'-]{3,40})/i)?.[1]?.trim() ?? null;
+  return {
+    amount,
+    place,
+    location,
+    relativeDeadline: inferDeadlineHint(blob, null),
   };
 }
 
@@ -583,42 +812,24 @@ export function buildActionReason(input: {
   estimatedTime: string;
   now?: Date;
 }): string {
-  const now = input.now ?? new Date();
-  const timing = input.dueAt
-    ? `Deadline: ${formatRelativeDeadline(input.dueAt, now)}`
-    : input.startsAt
-      ? `When: ${formatRelativeDeadline(input.startsAt, now)}`
-      : null;
-
-  let stake: string | null = null;
-  switch (input.workKind) {
-    case 'invoice':
-      stake = 'Payment may be required';
-      break;
-    case 'security':
-      stake = 'Confirm this was you';
-      break;
-    case 'meeting':
-      stake = 'Walk in prepared';
-      break;
-    case 'deadline':
-      stake = inferDeadlineHint(input.title, input.snippet) ?? 'Time-sensitive';
-      break;
-    case 'career':
-      stake = 'Career next step';
-      break;
-    case 'approval':
-      stake = 'Waiting on your decision';
-      break;
-    default: {
-      const snippet = collapseWhitespace(input.snippet ?? '').slice(0, 56);
-      stake = snippet || null;
-      break;
-    }
-  }
+  const narrative = synthesizeFocusNarrative({
+    kind:
+      input.workKind === 'meeting'
+        ? 'event'
+        : input.workKind === 'task'
+          ? 'task'
+          : 'email',
+    title: input.title,
+    fromName: input.fromName,
+    startsAt: input.startsAt,
+    dueAt: input.dueAt,
+    snippet: input.snippet,
+    bodyText: input.bodyText,
+    now: input.now,
+  });
 
   return truncate(
-    collapseWhitespace([timing, stake, `Est. ${input.estimatedTime}`].filter(Boolean).join(' · ')),
+    collapseWhitespace([narrative.reasonHint, `Est. ${input.estimatedTime}`].filter(Boolean).join(' · ')),
     88,
   );
 }
@@ -702,17 +913,6 @@ function shortSubject(subject: string): string {
     .trim();
   if (cleaned.length <= 48) return cleaned;
   return `${cleaned.slice(0, 47)}…`;
-}
-
-function cleanDetailText(value: string): string {
-  const cleaned = collapseWhitespace(
-    value
-      .replace(/https?:\/\/\S+/gi, '')
-      .replace(/\b(unsubscribe|view in browser|privacy policy)\b.*$/gim, '')
-      .replace(/[<>]/g, ' '),
-  );
-  if (cleaned.length < 24) return '';
-  return cleaned;
 }
 
 function collapseWhitespace(value: string): string {

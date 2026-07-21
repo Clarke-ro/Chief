@@ -22,9 +22,15 @@ export type FocusItem = {
   actions: FocusAction[];
   /** All-caps urgency chip on the detail screen */
   urgencyLabel: string;
-  /** Expanded “Why is this important?” copy */
+  /** Focus detail — what this is about (context-aware title). */
+  aboutTitle?: string;
+  aboutBody?: string;
+  /** Focus detail — what to do next (context-aware title). */
+  actionTitle?: string;
+  actionBody?: string;
+  /** @deprecated Prefer aboutBody */
   whyImportant: string;
-  /** Expanded “What happens if I delay?” copy */
+  /** @deprecated Prefer actionBody */
   delayImpact: string;
   /** Short recommendation line */
   aiRecommendation: string;

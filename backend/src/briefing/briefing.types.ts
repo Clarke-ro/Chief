@@ -16,7 +16,15 @@ export type FocusItemDto = {
   confidence: number;
   actions: FocusActionDto[];
   urgencyLabel: string;
+  /** Context-aware Focus detail section: what this is about. */
+  aboutTitle: string;
+  aboutBody: string;
+  /** Context-aware Focus detail section: what to do next. */
+  actionTitle: string;
+  actionBody: string;
+  /** @deprecated Prefer aboutBody — kept for older clients. */
   whyImportant: string;
+  /** @deprecated Prefer actionBody — kept for older clients. */
   delayImpact: string;
   aiRecommendation: string;
 };

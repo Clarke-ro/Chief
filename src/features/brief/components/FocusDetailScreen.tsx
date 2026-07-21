@@ -126,13 +126,21 @@ export function FocusDetailScreen({
           <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
 
           <View style={styles.copyBlock}>
-            <Text style={[styles.copyTitle, { color: colors.text }]}>Why is this important?</Text>
-            <Text style={[styles.copyBody, { color: colors.textSecondary }]}>{item.whyImportant}</Text>
+            <Text style={[styles.copyTitle, { color: colors.text }]}>
+              {item.aboutTitle?.trim() || 'What’s going on'}
+            </Text>
+            <Text style={[styles.copyBody, { color: colors.textSecondary }]}>
+              {item.aboutBody?.trim() || item.whyImportant}
+            </Text>
           </View>
 
           <View style={styles.copyBlock}>
-            <Text style={[styles.copyTitle, { color: colors.text }]}>What happens if I delay?</Text>
-            <Text style={[styles.copyBody, { color: colors.textSecondary }]}>{item.delayImpact}</Text>
+            <Text style={[styles.copyTitle, { color: colors.text }]}>
+              {item.actionTitle?.trim() || 'What to do'}
+            </Text>
+            <Text style={[styles.copyBody, { color: colors.textSecondary }]}>
+              {item.actionBody?.trim() || item.delayImpact}
+            </Text>
           </View>
         </View>
 
