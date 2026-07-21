@@ -8,7 +8,8 @@ import type { RawSyncBatch } from '../sync.types';
 
 /**
  * Persists fetched provider batches into Prisma tables the Home brief reads.
- * Lean path — no classification / knowledge-engine extras.
+ * Upserts only — never wipes prior emails/events/tasks. Brief row is marked
+ * stale (not deleted) so Home recomposes without an empty flash.
  */
 @Injectable()
 export class SyncPersistService {
@@ -50,10 +51,12 @@ export class SyncPersistService {
     }
 
     if (persisted > 0) {
-      // Drop today's cached brief so GET /workspace/brief recomposes.
+      // Mark today's brief stale so the next GET recomposes from upserted
+      // rows — never delete the row (avoids empty Home flashes).
       const briefDate = utcDateOnly();
-      await this.prisma.brief.deleteMany({
+      await this.prisma.brief.updateMany({
         where: { workspaceId: batch.workspaceId, briefDate },
+        data: { generatedAt: new Date(0) },
       });
     }
 

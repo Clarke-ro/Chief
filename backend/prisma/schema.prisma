@@ -112,6 +112,7 @@ model Workspace {
   scheduleItems     ScheduleItem[]
   analytics         AnalyticsSnapshot[]
   syncStates        SyncState[]
+  focusDismissals   FocusDismissal[]
 
   @@map("workspace")
 }
@@ -444,6 +445,25 @@ model Brief {
   @@unique([workspaceId, briefDate])
   @@index([workspaceId, generatedAt])
   @@map("brief")
+}
+
+/// Completed / dismissed Top Priority items — kept for history, never resurfaced.
+model FocusDismissal {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String?
+  /// Focus item id as shown on Home (`taskId` or `mail-{emailId}` / `event-{id}`).
+  sourceKey   String
+  sourceType  String
+  title       String?
+  dismissedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, sourceKey])
+  @@index([workspaceId, dismissedAt])
+  @@map("focus_dismissal")
 }
 
 enum TaskPriority {

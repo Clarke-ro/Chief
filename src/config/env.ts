@@ -41,7 +41,7 @@ export const env = {
 
   /**
    * When true (and API is configured), Home pulls `/v1/workspace/brief`.
-   * Failures fall back to the mock seed brief.
+   * After onboarding completes, failures keep the workspace cache — never mock seed.
    */
   liveHomeBriefFlag: trimPublic(process.env.EXPO_PUBLIC_LIVE_HOME_BRIEF) === 'true',
 

@@ -22,6 +22,7 @@ export function workspaceDataKeys(workspaceId: WorkspaceId) {
     dayPlan: workspaceKey(workspaceId, 'dayPlan.v2'),
     sessions: workspaceKey(workspaceId, 'sessions.v1'),
     notifications: workspaceKey(workspaceId, 'profile.notifications.v1'),
+    homeBrief: workspaceKey(workspaceId, 'homeBrief.v1'),
   } as const;
 }
 

@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { AppConfigService } from '../common/config/app-config.service';
+import { PrismaService } from '../common/prisma/prisma.service';
 import { WorkspaceService } from '../workspace/workspace.service';
 import { BETTER_AUTH } from './auth.constants';
 import type { BetterAuthInstance } from './better-auth.factory';
@@ -12,6 +13,7 @@ export class AuthService {
   constructor(
     private readonly config: AppConfigService,
     private readonly workspaces: WorkspaceService,
+    private readonly prisma: PrismaService,
     @Inject(BETTER_AUTH) private readonly auth: BetterAuthInstance,
   ) {
     this.logger.log(
@@ -30,15 +32,44 @@ export class AuthService {
       workspaceList.push(created);
     }
 
+    const dbUser = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { onboardingCompleted: true },
+    });
+
     return {
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
         image: user.image ?? null,
-        onboardingCompleted: user.onboardingCompleted ?? false,
+        onboardingCompleted:
+          dbUser?.onboardingCompleted ?? user.onboardingCompleted ?? false,
       },
       workspaces: workspaceList,
+    };
+  }
+
+  async setOnboardingCompleted(userId: string, completed: boolean) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { onboardingCompleted: completed },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        image: true,
+        onboardingCompleted: true,
+      },
+    });
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        image: user.image ?? null,
+        onboardingCompleted: user.onboardingCompleted,
+      },
     };
   }
 }

@@ -175,4 +175,13 @@ export const authService = {
     }
     return me;
   },
+
+  /** Persist onboarding flag on the server (source of truth across devices). */
+  async setOnboardingCompleted(completed: boolean): Promise<void> {
+    await apiJson('/v1/me/onboarding', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ completed }),
+    });
+  },
 };

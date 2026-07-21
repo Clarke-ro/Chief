@@ -12,8 +12,14 @@ export default function FocusDetailsRoute() {
   const item = useWorkspaceStore((s) =>
     id ? s.brief.focus.find((focus) => focus.id === id) : undefined,
   );
+  const completeFocus = useWorkspaceStore((s) => s.completeFocus);
 
   const onActionPress = (action: FocusAction) => {
+    if (!id) return;
+    if (action.id.includes('done') || /mark done/i.test(action.label)) {
+      void completeFocus(id).then(() => workspaceNav.back(() => workspaceNav.home()));
+      return;
+    }
     void dispatchFocusAction(item?.title ?? 'Focus item', action, 'focus');
   };
 

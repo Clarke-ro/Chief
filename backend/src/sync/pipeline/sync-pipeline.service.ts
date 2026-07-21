@@ -79,7 +79,7 @@ export class SyncPipelineService {
     const window = this.policies.planWindow({
       policy,
       reason: input.reason,
-      hasCursor: Boolean(state.cursor),
+      hasPriorSync: Boolean(state.lastSyncedAt),
       historicalLookbackDays: input.historicalLookbackDays,
     });
 

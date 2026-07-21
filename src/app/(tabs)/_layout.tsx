@@ -1,11 +1,12 @@
 import { BlurView } from 'expo-blur';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import { CalendarDays, ChartNoAxesCombined, Home, Sparkles, User } from 'lucide-react-native';
-import { memo } from 'react';
-import { Platform, StyleSheet, type ColorValue } from 'react-native';
+import { memo, useEffect } from 'react';
+import { ActivityIndicator, Platform, StyleSheet, View, type ColorValue } from 'react-native';
 
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { useThemeColors } from '@/hooks/useThemeColors';
+import { ensureSessionBoot, useSessionBootStore } from '@/stores';
 
 type TabIconProps = { color: ColorValue; size: number };
 
@@ -28,6 +29,24 @@ const ProfileIcon = memo(function ProfileIcon({ color, size }: TabIconProps) {
 export default function TabsLayout() {
   const scheme = useResolvedColorScheme();
   const colors = useThemeColors();
+  const ready = useSessionBootStore((s) => s.ready);
+  const hasSession = useSessionBootStore((s) => s.hasSession);
+
+  useEffect(() => {
+    void ensureSessionBoot();
+  }, []);
+
+  if (!ready) {
+    return (
+      <View style={[styles.boot, { backgroundColor: colors.bg }]}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  if (!hasSession) {
+    return <Redirect href="/onboarding" />;
+  }
 
   return (
     <Tabs
@@ -103,6 +122,11 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
+  boot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   label: {
     fontSize: 11,
     fontWeight: '500',

@@ -117,9 +117,20 @@ export class GoogleGmailFetcher implements SyncResourceFetcher {
       if (error instanceof GoogleApiError && error.status === 404) {
         this.logger.warn(
           { connectedAccountId: ctx.connectedAccountId },
-          'Gmail historyId expired; falling back to windowed sync',
+          'Gmail historyId expired; falling back to initial lookback window',
         );
-        return this.fetchInitialWindow({ ...ctx, cursor: null });
+        // History expiry needs a real re-seed — not the 30-minute incremental slice.
+        const lookbackDays = Math.max(ctx.window.lookbackDays || 0, 5);
+        return this.fetchInitialWindow({
+          ...ctx,
+          cursor: null,
+          window: {
+            ...ctx.window,
+            mode: 'initial',
+            from: new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000),
+            lookbackDays,
+          },
+        });
       }
       throw error;
     }

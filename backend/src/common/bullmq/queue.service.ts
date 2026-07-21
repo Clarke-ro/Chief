@@ -90,13 +90,24 @@ export class QueueService {
    * Call from the worker process only.
    */
   async ensureScheduledJobs(): Promise<void> {
+    // Drop any prior cadence (e.g. */15) so only the 30-minute job remains.
+    const repeatables = await this.syncQueue.getRepeatableJobs();
+    for (const job of repeatables) {
+      if (
+        job.name === 'sync.due-accounts' ||
+        job.id === ScheduledJobs.SYNC_DUE_ACCOUNTS
+      ) {
+        await this.syncQueue.removeRepeatableByKey(job.key);
+      }
+    }
+
     await this.syncQueue.add(
       'sync.due-accounts' satisfies SyncJobName,
       { reason: 'schedule' },
       {
         ...DEFAULT_JOB_OPTIONS,
         jobId: ScheduledJobs.SYNC_DUE_ACCOUNTS,
-        repeat: { pattern: '*/15 * * * *' },
+        repeat: { pattern: '*/30 * * * *' },
       },
     );
 

@@ -55,6 +55,7 @@ export function HomeScreen() {
   const mounted = useMountedRef();
   const brief = useWorkspaceStore((s) => s.brief);
   const refreshBrief = useWorkspaceStore((s) => s.refreshBrief);
+  const completeFocus = useWorkspaceStore((s) => s.completeFocus);
   const hasSession = useSessionBootStore((s) => s.hasSession);
   const sessionReady = useSessionBootStore((s) => s.ready);
   const notificationCount = useWorkspaceStore(
@@ -68,18 +69,20 @@ export function HomeScreen() {
 
   const kickedSync = useRef(false);
 
-  // Sync first (API pulls Gmail/Calendar), then load brief — avoids caching an empty brief.
+  // Cache-first: paint cached brief immediately; sync + merge in the background.
   useEffect(() => {
     if (!env.liveHomeBrief || !sessionReady || !hasSession || kickedSync.current) return;
     kickedSync.current = true;
     void (async () => {
+      // Show cache first (already in store from hydrate / prior session).
+      await refreshBrief();
       try {
         const workspaceId = await ensureActiveWorkspaceId();
         await syncRepository.runFirstConnection(workspaceId);
+        await refreshBrief();
       } catch {
-        // Still try to load whatever is already persisted.
+        // Keep cached workspace visible.
       }
-      await refreshBrief();
     })();
   }, [hasSession, refreshBrief, sessionReady]);
 
@@ -89,10 +92,14 @@ export function HomeScreen() {
 
   const onFocusAction = useCallback(
     (focusId: string, action: FocusAction) => {
+      if (action.id.includes('done') || /mark done/i.test(action.label)) {
+        void completeFocus(focusId);
+        return;
+      }
       const focus = brief.focus.find((f) => f.id === focusId);
       void dispatchFocusAction(focus?.title ?? action.label, action, 'home');
     },
-    [brief.focus],
+    [brief.focus, completeFocus],
   );
 
   const openAnalytics = useCallback(() => {

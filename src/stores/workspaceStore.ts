@@ -34,6 +34,7 @@ type WorkspaceState = {
 
   /** Brief */
   refreshBrief: () => Promise<void>;
+  completeFocus: (sourceKey: string) => Promise<void>;
   getFocusById: (id: string) => FocusItem | undefined;
   listFocus: () => FocusItem[];
 
@@ -288,6 +289,29 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({ brief: synced.brief, analytics: synced.analytics });
   },
 
+  completeFocus: async (sourceKey) => {
+    const { profile, dayPlan, analytics, brief } = get();
+    // Optimistic remove so the list doesn't flash the item back.
+    const optimistic: HomeBrief = {
+      ...brief,
+      focus: brief.focus.filter((item) => item.id !== sourceKey),
+    };
+    set({ brief: withProfileName(optimistic, profile) });
+    briefRepository.persistCache(optimistic);
+
+    try {
+      const loaded = await briefRepository.completeFocus(sourceKey);
+      const next = withProfileName(loaded, profile);
+      const synced = syncProgress(next, analytics, dayPlan);
+      set({ brief: synced.brief, analytics: synced.analytics });
+    } catch (error) {
+      if (__DEV__) {
+        console.warn('[workspaceStore] completeFocus failed', error);
+      }
+      await get().refreshBrief();
+    }
+  },
+
   getFocusById: (id) => get().brief.focus.find((item) => item.id === id),
 
   listFocus: () => get().brief.focus,
@@ -387,7 +411,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   hydrateForWorkspace: (workspaceId) => {
     const profile = readProfile(workspaceId);
-    const brief = withProfileName(briefRepository.getHomeBrief(), profile);
+    const brief = withProfileName(briefRepository.getHomeBrief(workspaceId), profile);
     const dayPlan = readDayPlan(workspaceId);
     const analytics = analyticsRepository.getSnapshot();
     const synced = syncProgress(brief, analytics, dayPlan);

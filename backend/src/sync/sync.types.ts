@@ -38,7 +38,10 @@ export type SyncPolicyDefinition = {
   resource: SyncResource;
   initialLookbackDays: number;
   initialLookaheadDays?: number;
+  /** How often scheduled sync is due (default 30). */
   scheduledIntervalMinutes: number;
+  /** Incremental scrape window after the first full sync (default 30). */
+  incrementalLookbackMinutes?: number;
   allowAutomaticHistorical: false;
 };
 
@@ -47,6 +50,8 @@ export type SyncWindowPlan = {
   to: Date;
   mode: 'initial' | 'incremental' | 'historical';
   lookbackDays: number;
+  /** Set for incremental windows (minutes), when not using day lookback. */
+  lookbackMinutes?: number;
   lookaheadDays: number;
 };
 

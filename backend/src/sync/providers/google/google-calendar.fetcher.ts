@@ -89,7 +89,8 @@ export class GoogleCalendarFetcher implements SyncResourceFetcher {
 
     return emptyBatch(ctx, {
       items,
-      cursorAfter: null,
+      // Checkpoint so pipeline hasPriorSync + hasCursor both stay true.
+      cursorAfter: `calendar.windowed:${ctx.window.to.toISOString()}`,
       meta: {
         checkpointKind: 'calendar.windowed',
         itemCount: items.length,

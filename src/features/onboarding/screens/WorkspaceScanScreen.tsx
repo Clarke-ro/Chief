@@ -1,99 +1,125 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { AppButton, ProgressBar } from '@/components/ui';
 import { OnboardingCopy } from '@/features/onboarding/components/OnboardingCopy';
 import { OnboardingShell } from '@/features/onboarding/components/OnboardingShell';
-import { useOnboardingStore } from '@/features/onboarding/store';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { onboardingRepository } from '@/services';
+import { ensureActiveWorkspaceId } from '@/services';
+import { briefRepository } from '@/services/repositories/briefRepository';
+import { syncRepository } from '@/services/repositories/syncRepository';
+import { useWorkspaceStore } from '@/stores';
 import { duration, spacing, typography } from '@/theme';
 
 const PHASES = [
-  'Reading your calendar…',
-  'Listening for urgent threads…',
-  'Prioritizing commitments…',
-  'Drafting today’s brief…',
+  'Connecting to your apps…',
+  'Pulling mail, calendar, and tasks…',
+  'Scoring what deserves attention…',
+  'Building your first brief…',
 ] as const;
 
-type Beat = 'scanning' | 'insight';
-
-function pickInsight(connected: Set<string>) {
-  const insights = onboardingRepository.listScanInsights();
-  const match = insights.find((insight) => {
-    if (!insight.requires?.length) return false;
-    return insight.requires.every((id) => connected.has(id));
-  });
-  return match ?? insights.find((i) => i.id === 'fallback') ?? insights[0];
-}
-
-/** Step 4 — scan, then a defining insight before the first brief. */
+/**
+ * Step 4 — prepare workspace from live sync (no mock scan).
+ * Waits until brief has real content (or timeout), then continues.
+ */
 export function WorkspaceScanScreen() {
   const colors = useThemeColors();
   const router = useRouter();
-  const connected = useOnboardingStore((s) => s.connected);
-  const insight = useMemo(() => pickInsight(connected), [connected]);
+  const refreshBrief = useWorkspaceStore((s) => s.refreshBrief);
 
-  const [beat, setBeat] = useState<Beat>('scanning');
   const [phase, setPhase] = useState(0);
-  const progress = (phase + 1) / PHASES.length;
+  const [status, setStatus] = useState('Preparing your workspace…');
+  const [error, setError] = useState<string | null>(null);
+  const [canContinue, setCanContinue] = useState(false);
+  const [ready, setReady] = useState(false);
+  const started = useRef(false);
+
+  const progress = Math.min(1, (phase + 1) / PHASES.length);
 
   useEffect(() => {
-    if (beat !== 'scanning') return;
+    const tick = setInterval(() => {
+      setPhase((p) => (p < PHASES.length - 1 ? p + 1 : p));
+    }, 2200);
+    return () => clearInterval(tick);
+  }, []);
 
-    if (phase >= PHASES.length - 1) {
-      const reveal = setTimeout(() => setBeat('insight'), 700);
-      return () => clearTimeout(reveal);
-    }
-    const tick = setTimeout(() => setPhase((p) => p + 1), 1100);
-    return () => clearTimeout(tick);
-  }, [beat, phase]);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
 
-  if (beat === 'insight') {
-    return (
-      <OnboardingShell
-        stepIndex={3}
-        footer={
-          <AppButton size="lg" onPress={() => router.replace('/onboarding/brief')}>
-            Show my brief
-          </AppButton>
+    void (async () => {
+      try {
+        const workspaceId = await ensureActiveWorkspaceId();
+        setStatus('Syncing connected apps…');
+        const prep = await syncRepository.prepareWorkspace(workspaceId, {
+          timeoutMs: 90_000,
+          pollMs: 2000,
+        });
+
+        setStatus('Composing your brief…');
+        // Force a fresh compose after sync (brief may have been empty/stale).
+        await refreshBrief();
+        let brief = useWorkspaceStore.getState().brief;
+
+        // Poll brief briefly if sync finished but compose raced.
+        const until = Date.now() + 20_000;
+        while (
+          Date.now() < until &&
+          brief.focus.length === 0 &&
+          brief.briefing.length === 0
+        ) {
+          await sleep(1500);
+          await refreshBrief();
+          brief = useWorkspaceStore.getState().brief;
         }
-      >
-        <Animated.View
-          entering={FadeIn.duration(duration.normal)}
-          style={styles.insightWrap}
-          accessibilityRole="summary"
-          accessibilityLabel={`${insight.headline}. ${insight.detail}`}
-        >
-          <Text style={[styles.insightEyebrow, { color: colors.textTertiary }]}>
-            Chief noticed
-          </Text>
-          <Animated.Text
-            entering={FadeInDown.delay(120).duration(duration.slow)}
-            style={[styles.insightHeadline, { color: colors.text }]}
-          >
-            {insight.headline}
-          </Animated.Text>
-          <Animated.Text
-            entering={FadeInDown.delay(280).duration(duration.normal)}
-            style={[styles.insightDetail, { color: colors.textSecondary }]}
-          >
-            {insight.detail}
-          </Animated.Text>
-        </Animated.View>
-      </OnboardingShell>
-    );
-  }
+
+        briefRepository.persistCache(brief, workspaceId);
+
+        if (brief.focus.length > 0 || brief.briefing.length > 0) {
+          setReady(true);
+          setStatus('Workspace ready');
+          setCanContinue(true);
+          return;
+        }
+
+        setStatus(
+          prep.ready
+            ? 'Sync finished — Chief will keep learning as more mail arrives.'
+            : 'Taking longer than usual — you can continue and refresh on Home.',
+        );
+        setCanContinue(true);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : 'Could not prepare workspace',
+        );
+        setCanContinue(true);
+      }
+    })();
+  }, [refreshBrief]);
 
   return (
-    <OnboardingShell stepIndex={3}>
+    <OnboardingShell
+      stepIndex={3}
+      footer={
+        canContinue ? (
+          <AppButton
+            size="lg"
+            onPress={() =>
+              router.replace(ready ? '/onboarding/brief' : '/onboarding/ready')
+            }
+          >
+            {ready ? 'Show my brief' : 'Continue'}
+          </AppButton>
+        ) : null
+      }
+    >
       <View style={styles.content}>
         <OnboardingCopy
           eyebrow="Chief is working"
-          title="Scanning your workspace."
-          body="A quiet pass across the tools you connected — only what shapes today."
+          title="Preparing your workspace."
+          body="Initial sync, relevance scoring, and your first brief — Home will open with your real data."
         />
 
         <View style={styles.meter}>
@@ -106,10 +132,20 @@ export function WorkspaceScanScreen() {
           >
             {PHASES[phase]}
           </Animated.Text>
+          <Text style={[styles.status, { color: colors.textTertiary }]}>{status}</Text>
+          {error ? (
+            <Text style={[styles.error, { color: colors.danger }]}>
+              {error}
+            </Text>
+          ) : null}
         </View>
       </View>
     </OnboardingShell>
   );
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const styles = StyleSheet.create({
@@ -118,34 +154,17 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   meter: {
-    gap: spacing[16],
+    gap: spacing[12],
     width: '100%',
-    maxWidth: 360,
   },
   phase: {
-    ...typography.callout,
+    ...typography.body,
+    marginTop: spacing[8],
   },
-  insightWrap: {
-    gap: spacing[20],
-    maxWidth: 400,
-    width: '100%',
-    paddingBottom: spacing[16],
-  },
-  insightEyebrow: {
+  status: {
     ...typography.caption,
-    fontWeight: '600',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
   },
-  insightHeadline: {
-    ...typography.display,
-    fontSize: 32,
-    lineHeight: 40,
-    letterSpacing: -0.7,
-  },
-  insightDetail: {
-    ...typography.callout,
-    lineHeight: 24,
-    maxWidth: 340,
+  error: {
+    ...typography.caption,
   },
 });

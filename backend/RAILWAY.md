@@ -29,8 +29,12 @@ Railway service **Root Directory** = `backend`. Do not split repos unless the te
    - Copy API env vars onto `worker`, then set `APP_ROLE=worker`
    - **Root Directory must be `backend`** (same as API). If left at repo root,
      Railway builds the Expo web app with Caddy and sync never runs.
-   - Deploy from the **monorepo root**: `railway up --service worker`
-     (same rule as API — do not `railway up` from inside `/backend`)
+   - **GitHub / dashboard deploys:** Root Directory = `backend`, Dockerfile =
+     `Dockerfile` (picked up via `backend/railway.toml`).
+   - **CLI deploys (`railway up`):** run from **`backend/`**, not the monorepo
+     root — `railway up` uploads the current directory, so a root upload builds
+     Expo/Caddy even when Root Directory is set to `backend`:
+     `cd backend && railway up --service worker` (same for `api`)
    - Worker listens on `PORT` only for `/health/live` (same healthcheck as API)
    - API alone runs `prisma migrate deploy` on boot; worker skips migrate
    - Manual / Home sync also runs **in-process on the API** so brief data can

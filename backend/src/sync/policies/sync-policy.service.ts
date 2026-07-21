@@ -11,6 +11,8 @@ import {
   policiesForProvider,
 } from './sync-policies';
 
+const DEFAULT_INCREMENTAL_LOOKBACK_MINUTES = 30;
+
 @Injectable()
 export class SyncPolicyService {
   listForProvider(provider: IntegrationProvider) {
@@ -41,7 +43,8 @@ export class SyncPolicyService {
   planWindow(input: {
     policy: SyncPolicyDefinition;
     reason: SyncReason;
-    hasCursor: boolean;
+    /** True after at least one successful sync for this account+resource. */
+    hasPriorSync: boolean;
     historicalLookbackDays?: number;
   }): SyncWindowPlan {
     const now = new Date();
@@ -61,13 +64,15 @@ export class SyncPolicyService {
       };
     }
 
-    // Manual (Home pull / Connect) and onboarding always re-window so Home
-    // isn't stuck after an empty incremental delta.
-    if (
-      !input.hasCursor ||
+    // First sync / onboarding / recovery: full initial lookback only.
+    // Manual + schedule after a prior sync use the incremental window so we
+    // do not re-scrape the whole mailbox/calendar on every Home refresh.
+    const needsInitial =
+      !input.hasPriorSync ||
       input.reason === 'onboarding' ||
-      input.reason === 'manual'
-    ) {
+      input.reason === 'recovery';
+
+    if (needsInitial) {
       return {
         from: daysAgo(now, input.policy.initialLookbackDays),
         to: daysAhead(now, lookaheadDays),
@@ -77,11 +82,17 @@ export class SyncPolicyService {
       };
     }
 
+    const lookbackMinutes =
+      input.policy.incrementalLookbackMinutes ??
+      DEFAULT_INCREMENTAL_LOOKBACK_MINUTES;
+
     return {
-      from: daysAgo(now, 1),
+      from: minutesAgo(now, lookbackMinutes),
+      // Keep calendar/task lookahead so upcoming items stay in the scrape.
       to: daysAhead(now, lookaheadDays || 1),
       mode: 'incremental',
-      lookbackDays: 1,
+      lookbackDays: 0,
+      lookbackMinutes,
       lookaheadDays: lookaheadDays || 1,
     };
   }
@@ -104,4 +115,8 @@ function daysAgo(from: Date, days: number) {
 
 function daysAhead(from: Date, days: number) {
   return new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function minutesAgo(from: Date, minutes: number) {
+  return new Date(from.getTime() - minutes * 60 * 1000);
 }

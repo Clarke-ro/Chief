@@ -18,7 +18,7 @@ import { OnboardingShell } from '@/features/onboarding/components/OnboardingShel
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { authService, AuthServiceError } from '@/services/auth/authService';
-import { useSessionBootStore } from '@/stores';
+import { usePreferencesStore, useSessionBootStore } from '@/stores';
 import { radius, spacing, typography } from '@/theme';
 
 type AuthMode = 'signIn' | 'signUp';
@@ -34,7 +34,16 @@ export function AuthScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const continueNext = () => router.replace('/onboarding/connect');
+  const continueAfterAuth = (me: Awaited<ReturnType<typeof authService.signIn>>) => {
+    if (me.user.onboardingCompleted) {
+      usePreferencesStore.getState().completeOnboarding();
+      router.replace('/home');
+      return;
+    }
+    usePreferencesStore.getState().resetOnboarding();
+    router.replace('/onboarding/connect');
+  };
+
   const isLight = scheme === 'light';
   const labelColor = isLight ? '#111113' : colors.text;
   const placeholderColor = colors.textTertiary;
@@ -66,7 +75,7 @@ export function AuthScreen() {
           ? await authService.signIn(email, password)
           : await authService.signUp({ email, password });
       useSessionBootStore.getState().markSignedIn(me);
-      continueNext();
+      continueAfterAuth(me);
     } catch (error) {
       const message =
         error instanceof AuthServiceError

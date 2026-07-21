@@ -51,6 +51,7 @@ export class GoogleTasksFetcher implements SyncResourceFetcher {
     const lists = await this.listTaskLists(ctx.accessToken);
     const items: RawSyncBatch['items'] = [];
     let pages = 0;
+    const incremental = ctx.window.mode === 'incremental';
 
     for (const list of lists) {
       let pageToken: string | undefined;
@@ -61,6 +62,10 @@ export class GoogleTasksFetcher implements SyncResourceFetcher {
           showDeleted: 'false',
           maxResults: '100',
         });
+        // After the first full pull, only tasks updated in the incremental window.
+        if (incremental) {
+          params.set('updatedMin', ctx.window.from.toISOString());
+        }
         if (pageToken) params.set('pageToken', pageToken);
 
         const data = await googleFetchJson<TasksResponse>(
@@ -107,9 +112,9 @@ export class GoogleTasksFetcher implements SyncResourceFetcher {
 
     return emptyBatch(ctx, {
       items,
-      cursorAfter: null,
+      cursorAfter: `tasks:${ctx.window.mode}:${new Date().toISOString()}`,
       meta: {
-        checkpointKind: 'tasks.windowed',
+        checkpointKind: incremental ? 'tasks.incremental' : 'tasks.initial',
         itemCount: items.length,
         listCount: lists.length,
         pages,

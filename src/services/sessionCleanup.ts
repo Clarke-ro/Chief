@@ -2,15 +2,16 @@ import { authService } from '@/services/auth/authService';
 import { queryClient } from '@/services/queryClient';
 import { getActiveWorkspaceId } from '@/services/activeWorkspace';
 import { offlineQueue } from '@/services/sync/offlineQueue';
-import { LEGACY_KEYS, workspaceDataKeys } from '@/services/storageKeys';
+import { GLOBAL_KEYS, LEGACY_KEYS, workspaceDataKeys } from '@/services/storageKeys';
 import { storage } from '@/services/storage';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { usePreferencesStore } from '@/stores/preferences';
 import { useSessionBootStore } from '@/stores/sessionBoot';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 function sensitiveKeysFor(workspaceId: string): string[] {
   const keys = workspaceDataKeys(workspaceId);
-  return [keys.dayPlan, keys.sessions, keys.notifications];
+  return [keys.dayPlan, keys.sessions, keys.notifications, keys.homeBrief];
 }
 
 export type ClearSessionResult = {
@@ -29,9 +30,14 @@ function wipeLocalWorkspaceData() {
     storage.remove(key);
   }
 
+  // Drop stale workspace pointer so the next session re-resolves cleanly.
+  storage.remove(GLOBAL_KEYS.activeWorkspaceId);
+
   queryClient.clear();
   useCanvasStore.getState().close();
   useWorkspaceStore.getState().resetAfterLogout();
+  // Critical: otherwise sign-in bounces straight to Home with old flags/cache.
+  usePreferencesStore.getState().resetOnboarding();
 }
 
 /**
@@ -40,6 +46,16 @@ function wipeLocalWorkspaceData() {
  * Local wipe always runs even if SecureStore fails.
  */
 export async function clearUserSession(): Promise<ClearSessionResult> {
+  // Reset server onboarding while auth is still valid — otherwise re-login
+  // jumps straight to Home again.
+  try {
+    await authService.setOnboardingCompleted(false);
+  } catch (error) {
+    if (__DEV__) {
+      console.warn('[clearUserSession] onboarding reset failed', error);
+    }
+  }
+
   let authCleared = true;
   try {
     await authService.signOut();

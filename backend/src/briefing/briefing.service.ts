@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   IntegrationProvider,
   TaskPriority,
@@ -16,6 +16,13 @@ import {
   type HomeBriefDto,
   isHomeBriefDto,
 } from './briefing.types';
+import {
+  RELEVANCE_THRESHOLDS,
+  scoreCalendarEvent,
+  scoreEmail,
+  scoreTask,
+  toActionableTitle,
+} from './relevance.scorer';
 
 const PLATFORMS = new Set([
   'gmail',
@@ -26,6 +33,8 @@ const PLATFORMS = new Set([
   'asana',
   'trello',
 ]);
+
+type RankedFocus = FocusItemDto & { relevance: number };
 
 @Injectable()
 export class BriefingService {
@@ -88,33 +97,107 @@ export class BriefingService {
     return composed;
   }
 
+  /**
+   * Mark a Top Priority item done: keep history, drop from active focus,
+   * do not resurface on the next compose.
+   */
+  async completeFocusItem(
+    user: AuthUser,
+    sourceKey: string,
+    workspaceId?: string,
+  ): Promise<HomeBriefDto> {
+    const wsId = await this.resolveWorkspaceId(user, workspaceId);
+    await this.membership.requireMembership(user.id, wsId);
+
+    const key = sourceKey.trim();
+    if (!key) {
+      throw new NotFoundException('Focus item id required');
+    }
+
+    let sourceType = 'unknown';
+    let title: string | null = null;
+
+    if (key.startsWith('mail-')) {
+      sourceType = 'email';
+      const emailId = key.slice('mail-'.length);
+      const email = await this.prisma.email.findFirst({
+        where: { id: emailId, workspaceId: wsId },
+      });
+      title = email?.subject ?? null;
+    } else if (key.startsWith('event-')) {
+      sourceType = 'event';
+      const eventId = key.slice('event-'.length);
+      const event = await this.prisma.calendarEvent.findFirst({
+        where: { id: eventId, workspaceId: wsId },
+      });
+      title = event?.title ?? null;
+    } else {
+      sourceType = 'task';
+      const task = await this.prisma.task.findFirst({
+        where: { id: key, workspaceId: wsId },
+      });
+      if (task) {
+        title = task.title;
+        await this.prisma.task.update({
+          where: { id: task.id },
+          data: {
+            status: TaskStatus.done,
+            section: TaskSection.completed,
+            completedAt: new Date(),
+          },
+        });
+      }
+    }
+
+    await this.prisma.focusDismissal.upsert({
+      where: {
+        workspaceId_sourceKey: { workspaceId: wsId, sourceKey: key },
+      },
+      create: {
+        workspaceId: wsId,
+        userId: user.id,
+        sourceKey: key,
+        sourceType,
+        title,
+      },
+      update: {
+        dismissedAt: new Date(),
+        title: title ?? undefined,
+      },
+    });
+
+    // Force recompose so Home drops the item immediately.
+    await this.prisma.brief.updateMany({
+      where: { workspaceId: wsId, briefDate: utcDateOnly() },
+      data: { generatedAt: new Date(0) },
+    });
+
+    return this.getHomeBrief(user, wsId);
+  }
+
   private async composeBrief(user: AuthUser, workspaceId: string): Promise<HomeBriefDto> {
     const now = new Date();
     const calendarFrom = new Date(now.getTime() - 12 * 60 * 60 * 1000);
     const calendarTo = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const mailFrom = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
 
-    const [tasks, unreadEmails, recentEmails, events] = await Promise.all([
+    const [tasks, emails, events, dismissals] = await Promise.all([
       this.prisma.task.findMany({
         where: {
           workspaceId,
-          section: TaskSection.today,
           status: { not: TaskStatus.done },
+          section: { in: [TaskSection.today, TaskSection.upcoming] },
         },
-        orderBy: [{ priority: 'asc' }, { dueAt: 'asc' }, { createdAt: 'asc' }],
-        take: 12,
+        orderBy: [{ dueAt: 'asc' }, { createdAt: 'asc' }],
+        take: 40,
       }),
       this.prisma.email.findMany({
         where: {
           workspaceId,
-          isUnread: true,
+          OR: [{ receivedAt: { gte: mailFrom } }, { receivedAt: null }],
         },
         orderBy: { receivedAt: 'desc' },
-        take: 8,
-      }),
-      this.prisma.email.findMany({
-        where: { workspaceId },
-        orderBy: { receivedAt: 'desc' },
-        take: 8,
+        take: 60,
       }),
       this.prisma.calendarEvent.findMany({
         where: {
@@ -123,31 +206,93 @@ export class BriefingService {
           NOT: { status: 'cancelled' },
         },
         orderBy: { startsAt: 'asc' },
-        take: 8,
+        take: 24,
+      }),
+      this.prisma.focusDismissal.findMany({
+        where: { workspaceId },
+        select: { sourceKey: true },
       }),
     ]);
 
-    // Prefer unread; fall back to newest synced mail (many inboxes have 0 UNREAD).
-    const emails = unreadEmails.length > 0 ? unreadEmails : recentEmails;
+    const dismissed = new Set(dismissals.map((d) => d.sourceKey));
 
-    // Prisma enum order is high/medium/low — reorder so high comes first.
-    const priorityRank: Record<TaskPriority, number> = {
-      high: 0,
-      medium: 1,
-      low: 2,
-    };
-    tasks.sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority]);
+    const rankedFocus: RankedFocus[] = [];
+    const briefingCandidates: Array<BriefingSignalDto & { relevance: number }> = [];
 
-    let focus: FocusItemDto[] = tasks.map((task) => this.taskToFocus(task));
-    // Until task sync exists, surface top mail as focus so Home isn't blank.
-    if (focus.length === 0 && emails.length > 0) {
-      focus = emails.slice(0, 5).map((email, index) => this.emailToFocus(email, index));
+    for (const task of tasks) {
+      const id = task.id;
+      if (dismissed.has(id)) continue;
+      const relevance = scoreTask({
+        title: task.title,
+        description: task.description,
+        priority: task.priority,
+        dueAt: task.dueAt,
+        now,
+      });
+      if (relevance < RELEVANCE_THRESHOLDS.focus) continue;
+      rankedFocus.push({
+        ...this.taskToFocus(task, relevance),
+        relevance,
+      });
     }
 
-    const briefing: BriefingSignalDto[] = [
-      ...emails.map((email) => this.emailToSignal(email)),
-      ...events.map((event) => this.eventToSignal(event)),
-    ].slice(0, 12);
+    for (const email of emails) {
+      const id = `mail-${email.id}`;
+      if (dismissed.has(id)) continue;
+      const relevance = scoreEmail({
+        subject: email.subject,
+        snippet: email.snippet,
+        bodyText: email.bodyText,
+        fromAddress: email.fromAddress,
+        fromName: email.fromName,
+        labelIds: email.labelIds,
+        isUnread: email.isUnread,
+        receivedAt: email.receivedAt,
+      });
+      if (relevance >= RELEVANCE_THRESHOLDS.briefing) {
+        briefingCandidates.push({
+          ...this.emailToSignal(email, relevance),
+          relevance,
+        });
+      }
+      if (relevance >= RELEVANCE_THRESHOLDS.focus) {
+        rankedFocus.push({
+          ...this.emailToFocus(email, relevance),
+          relevance,
+        });
+      }
+    }
+
+    for (const event of events) {
+      const id = `event-${event.id}`;
+      if (dismissed.has(id)) continue;
+      const relevance = scoreCalendarEvent({
+        title: event.title,
+        description: event.description,
+        startsAt: event.startsAt,
+        now,
+      });
+      if (relevance >= RELEVANCE_THRESHOLDS.briefing) {
+        briefingCandidates.push({
+          ...this.eventToSignal(event),
+          relevance,
+        });
+      }
+      if (relevance >= RELEVANCE_THRESHOLDS.focus) {
+        rankedFocus.push({
+          ...this.eventToFocus(event, relevance),
+          relevance,
+        });
+      }
+    }
+
+    rankedFocus.sort((a, b) => b.relevance - a.relevance);
+    briefingCandidates.sort((a, b) => b.relevance - a.relevance);
+
+    const focus: FocusItemDto[] = rankedFocus.slice(0, 6).map(({ relevance: _r, ...item }) => item);
+    const briefing: BriefingSignalDto[] = briefingCandidates
+      .slice(0, 10)
+      .map(({ relevance: _r, ...item }) => item);
 
     const openCount = focus.length;
     const signalCount = briefing.length;
@@ -162,18 +307,14 @@ export class BriefingService {
     else if (openCount === 0) successLabel = 'Clear focus';
 
     let successInsight =
-      'Clear your top focus items early and the rest of the day opens up.';
+      'Clear your top priorities early and the rest of the day opens up.';
     if (openCount === 0 && signalCount === 0) {
       successInsight =
-        'Connect Google and pull to refresh — sync needs mail or calendar before the brief fills.';
-    } else if (tasks.length === 0 && emails.length > 0) {
-      successInsight = unreadEmails.length
-        ? 'Unread mail is queued as today’s priorities until task sync lands.'
-        : 'Recent mail is queued as today’s priorities until task sync lands.';
+        'Connect your work apps — Chief will surface deadlines, meetings, and actions that matter.';
     } else if (openCount === 0) {
-      successInsight = 'No open focus items — scan briefing signals for anything urgent.';
+      successInsight = 'No open priorities — scan briefing for anything that still needs a decision.';
     } else if (openCount <= 3) {
-      successInsight = `Clear ${openCount} focus item${openCount === 1 ? '' : 's'} to stay ahead today.`;
+      successInsight = `Clear ${openCount} priority item${openCount === 1 ? '' : 's'} to stay ahead today.`;
     }
 
     return {
@@ -186,38 +327,42 @@ export class BriefingService {
     };
   }
 
-  private taskToFocus(task: {
-    id: string;
-    title: string;
-    description: string;
-    details: string;
-    platform: string;
-    provider: IntegrationProvider | null;
-    priority: TaskPriority;
-    estimatedTime: string | null;
-    estimatedMinutes: number | null;
-    confidence: number | null;
-  }): FocusItemDto {
+  private taskToFocus(
+    task: {
+      id: string;
+      title: string;
+      description: string;
+      details: string;
+      platform: string;
+      provider: IntegrationProvider | null;
+      priority: TaskPriority;
+      estimatedTime: string | null;
+      estimatedMinutes: number | null;
+      confidence: number | null;
+    },
+    relevance: number,
+  ): FocusItemDto {
     const platform = mapPlatform(task.platform, task.provider, 'notion');
     const estimatedTime =
       task.estimatedTime?.trim() ||
-      (task.estimatedMinutes != null ? `${task.estimatedMinutes} min` : '10 min');
-    const reason =
-      task.description.trim() ||
-      (task.priority === TaskPriority.high
-        ? 'High priority on today’s list.'
-        : 'On your today list.');
+      (task.estimatedMinutes != null ? `${task.estimatedMinutes} min` : '15 min');
+    const title = toActionableTitle({ kind: 'task', title: task.title });
 
     return {
       id: task.id,
       platform,
-      title: task.title,
-      reason,
+      title,
+      reason:
+        task.description.trim() ||
+        (task.priority === TaskPriority.high
+          ? 'High-priority work on your list.'
+          : 'Actionable work for today.'),
       estimatedTime,
-      priority: task.priority,
-      confidence: clamp01(task.confidence ?? 0.72),
+      priority: priorityFromScore(relevance, task.priority),
+      confidence: clamp01(Math.max(task.confidence ?? 0.7, relevance)),
       actions: [
-        { id: `${task.id}-ask`, label: 'Ask Chief', tone: 'accent' },
+        { id: `${task.id}-done`, label: 'Mark done', tone: 'accent' },
+        { id: `${task.id}-ask`, label: 'Ask Chief' },
         { id: `${task.id}-open`, label: 'Open' },
       ],
       urgencyLabel:
@@ -229,7 +374,7 @@ export class BriefingService {
       whyImportant:
         task.details.trim() ||
         task.description.trim() ||
-        'This is on your focus list for today.',
+        'This is actionable work that deserves attention today.',
       delayImpact:
         'Leaving this open may push other commitments later in the day.',
       aiRecommendation: 'Start this in your next focused block.',
@@ -246,47 +391,95 @@ export class BriefingService {
       fromAddress: string | null;
       isUnread: boolean;
     },
-    index: number,
+    relevance: number,
   ): FocusItemDto {
     const from = email.fromName || email.fromAddress || 'Inbox';
+    const subject = email.subject?.trim() || 'Email thread';
+    const title = toActionableTitle({
+      kind: 'email',
+      title: subject,
+      fromName: email.fromName,
+    });
+
     return {
       id: `mail-${email.id}`,
       platform: mapPlatform('gmail', email.provider, 'gmail'),
-      title: email.subject?.trim() || 'Email thread',
-      reason: email.isUnread ? `Unread from ${from}` : `Recent from ${from}`,
+      title,
+      reason: `Meaningful thread from ${from}`,
       estimatedTime: '10 min',
-      priority: index < 2 ? 'high' : 'medium',
-      confidence: email.isUnread ? 0.82 : 0.7,
+      priority: priorityFromScore(relevance),
+      confidence: clamp01(relevance),
       actions: [
-        { id: `${email.id}-ask`, label: 'Ask Chief', tone: 'accent' },
+        { id: `${email.id}-done`, label: 'Mark done', tone: 'accent' },
+        { id: `${email.id}-ask`, label: 'Ask Chief' },
         { id: `${email.id}-open`, label: 'Open' },
       ],
-      urgencyLabel: email.isUnread ? 'Unread' : 'Recent',
+      urgencyLabel: relevance >= 0.7 ? 'Needs action' : 'Follow up',
       whyImportant:
         email.snippet?.trim() ||
-        'This thread was pulled from your connected Gmail account.',
-      delayImpact: 'Leaving inbox threads open stacks follow-ups for later today.',
-      aiRecommendation: email.isUnread
-        ? 'Skim and reply or archive.'
-        : 'Check whether a follow-up is still needed.',
+        'This thread looks like real work — a deadline, decision, or reply.',
+      delayImpact: 'Ignoring this may miss a deadline or block someone waiting on you.',
+      aiRecommendation: 'Decide: reply, schedule, or delegate — then mark done.',
     };
   }
 
-  private emailToSignal(email: {
-    id: string;
-    provider: IntegrationProvider;
-    subject: string | null;
-    snippet: string | null;
-    fromName: string | null;
-    fromAddress: string | null;
-    receivedAt: Date | null;
-  }): BriefingSignalDto {
+  private eventToFocus(
+    event: {
+      id: string;
+      provider: IntegrationProvider;
+      title: string;
+      startsAt: Date;
+      location: string | null;
+    },
+    relevance: number,
+  ): FocusItemDto {
+    const title = toActionableTitle({
+      kind: 'event',
+      title: event.title,
+      startsAt: event.startsAt,
+    });
+    return {
+      id: `event-${event.id}`,
+      platform: mapPlatform('calendar', event.provider, 'calendar'),
+      title,
+      reason: event.location?.trim()
+        ? `Upcoming · ${event.location.trim()}`
+        : 'Upcoming on your calendar',
+      estimatedTime: '15 min',
+      priority: priorityFromScore(relevance),
+      confidence: clamp01(relevance),
+      actions: [
+        { id: `${event.id}-done`, label: 'Mark done', tone: 'accent' },
+        { id: `${event.id}-ask`, label: 'Ask Chief' },
+        { id: `${event.id}-open`, label: 'Open' },
+      ],
+      urgencyLabel: 'Meeting',
+      whyImportant: 'Prepare so you walk in ready — agenda, asks, and decisions.',
+      delayImpact: 'Showing up unprepared wastes the meeting and follow-ups pile up.',
+      aiRecommendation: 'Skim notes and list 2–3 outcomes before it starts.',
+    };
+  }
+
+  private emailToSignal(
+    email: {
+      id: string;
+      provider: IntegrationProvider;
+      subject: string | null;
+      snippet: string | null;
+      fromName: string | null;
+      fromAddress: string | null;
+      receivedAt: Date | null;
+    },
+    relevance: number,
+  ): BriefingSignalDto {
     const from = email.fromName || email.fromAddress || 'Inbox';
     return {
       id: email.id,
       platform: mapPlatform('gmail', email.provider, 'gmail'),
-      title: email.subject?.trim() || 'Unread email',
-      summary: email.snippet?.trim() || `From ${from}`,
+      title: email.subject?.trim() || 'Important email',
+      summary:
+        email.snippet?.trim() ||
+        (relevance >= 0.65 ? `Action likely needed · ${from}` : `From ${from}`),
       timestamp: formatRelative(email.receivedAt),
     };
   }
@@ -302,12 +495,11 @@ export class BriefingService {
     const time = event.startsAt.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
-      timeZone: 'UTC',
       hour12: true,
     });
     const summary = event.location?.trim()
       ? `${time} · ${event.location.trim()}`
-      : `${time} (UTC)`;
+      : time;
     return {
       id: event.id,
       platform: mapPlatform('calendar', event.provider, 'calendar'),
@@ -333,7 +525,8 @@ function utcDateOnly(date = new Date()): Date {
   );
 }
 
-function isFresh(generatedAt: Date, maxAgeMs = 15 * 60 * 1000): boolean {
+/** Align with 30-minute sync cadence; persist marks stale immediately on new data. */
+function isFresh(generatedAt: Date, maxAgeMs = 30 * 60 * 1000): boolean {
   return Date.now() - generatedAt.getTime() < maxAgeMs;
 }
 
@@ -352,6 +545,16 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+function priorityFromScore(
+  relevance: number,
+  fallback?: TaskPriority,
+): 'high' | 'medium' | 'low' {
+  if (relevance >= 0.7) return 'high';
+  if (relevance >= 0.55) return 'medium';
+  if (fallback) return fallback;
+  return 'low';
+}
+
 function mapPlatform(
   raw: string | null | undefined,
   provider: IntegrationProvider | null | undefined,
@@ -363,7 +566,6 @@ function mapPlatform(
   switch (provider) {
     case IntegrationProvider.google:
       if (normalized.includes('cal')) return 'calendar';
-      // Google Tasks map to the task-shaped platform mark until a dedicated icon exists.
       if (normalized === 'asana' || normalized.includes('task')) return 'asana';
       return 'gmail';
     case IntegrationProvider.microsoft:
