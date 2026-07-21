@@ -83,7 +83,6 @@ export function HomeScreen() {
         const workspaceId = await ensureActiveWorkspaceId();
         const started = await syncRepository.runFirstConnection(workspaceId);
         if (started) {
-          await new Promise((r) => setTimeout(r, 4000));
           await refreshBrief();
         }
       } catch {

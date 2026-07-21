@@ -1,16 +1,26 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { ConnectedAccountStatus, SyncResource } from '@prisma/client';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConnectedAccountStatus,
+  IntegrationProvider,
+  SyncResource,
+  type ConnectedAccount,
+} from '@prisma/client';
 import type { AuthUser } from '../auth/decorators/current-user.decorator';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { MembershipService } from '../membership/membership.service';
 import { SyncOrchestratorService } from './orchestrator/sync-orchestrator.service';
+import { SyncPipelineService } from './pipeline/sync-pipeline.service';
+import type { SyncReason } from './sync.types';
 
 @Injectable()
 export class SyncService {
+  private readonly logger = new Logger(SyncService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly membership: MembershipService,
     private readonly orchestrator: SyncOrchestratorService,
+    private readonly pipeline: SyncPipelineService,
   ) {}
 
   async getStatus(user: AuthUser, connectedAccountId: string, workspaceId: string) {
@@ -40,12 +50,27 @@ export class SyncService {
     resource?: SyncResource,
   ) {
     const account = await this.requireAccount(user, connectedAccountId, workspaceId);
-    const result = await this.orchestrator.triggerManual({
-      workspaceId: account.workspaceId,
-      connectedAccountId: account.id,
-      resource,
-    });
-    return { ok: true, ...result };
+
+    // Best-effort queue for a properly configured worker.
+    try {
+      await this.orchestrator.triggerManual({
+        workspaceId: account.workspaceId,
+        connectedAccountId: account.id,
+        resource,
+      });
+    } catch (error) {
+      this.logger.warn(
+        {
+          err: error instanceof Error ? error.message : String(error),
+          connectedAccountId: account.id,
+        },
+        'Queue enqueue failed — continuing with in-process sync',
+      );
+    }
+
+    // Always pull on the API so Home fills even when the worker service is misconfigured.
+    const processed = await this.processInline(account, resource, 'manual');
+    return { ok: true, jobName: 'sync.inline', processed };
   }
 
   async triggerHistorical(
@@ -56,13 +81,44 @@ export class SyncService {
     resource?: SyncResource,
   ) {
     const account = await this.requireAccount(user, connectedAccountId, workspaceId);
-    await this.orchestrator.triggerHistorical({
-      workspaceId: account.workspaceId,
-      connectedAccountId: account.id,
-      resource,
-      lookbackDays,
-    });
-    return { ok: true, historical: true, lookbackDays };
+    try {
+      await this.orchestrator.triggerHistorical({
+        workspaceId: account.workspaceId,
+        connectedAccountId: account.id,
+        resource,
+        lookbackDays,
+      });
+    } catch (error) {
+      this.logger.warn(
+        { err: error instanceof Error ? error.message : String(error) },
+        'Historical enqueue failed — running inline',
+      );
+    }
+
+    const resources = resource ? [resource] : this.inlineResourcesFor(account.provider);
+    let processed = 0;
+    for (const r of resources) {
+      try {
+        const result = await this.pipeline.runResourceJob({
+          workspaceId: account.workspaceId,
+          connectedAccountId: account.id,
+          resource: r,
+          reason: 'historical',
+          historicalLookbackDays: lookbackDays,
+        });
+        processed += result.itemCount;
+      } catch (error) {
+        this.logger.warn(
+          {
+            resource: r,
+            err: error instanceof Error ? error.message : String(error),
+          },
+          'Inline historical resource failed',
+        );
+      }
+    }
+
+    return { ok: true, historical: true, lookbackDays, processed };
   }
 
   async triggerRecovery(
@@ -71,11 +127,68 @@ export class SyncService {
     workspaceId: string,
   ) {
     const account = await this.requireAccount(user, connectedAccountId, workspaceId);
-    await this.orchestrator.triggerRecovery({
-      workspaceId: account.workspaceId,
-      connectedAccountId: account.id,
-    });
-    return { ok: true, recovery: true };
+    try {
+      await this.orchestrator.triggerRecovery({
+        workspaceId: account.workspaceId,
+        connectedAccountId: account.id,
+      });
+    } catch {
+      // ignore queue errors
+    }
+    const processed = await this.processInline(account, undefined, 'recovery');
+    return { ok: true, recovery: true, processed };
+  }
+
+  private async processInline(
+    account: ConnectedAccount,
+    resource: SyncResource | undefined,
+    reason: SyncReason,
+  ): Promise<number> {
+    const resources = resource
+      ? [resource]
+      : this.inlineResourcesFor(account.provider);
+
+    let processed = 0;
+    for (const r of resources) {
+      try {
+        const result = await this.pipeline.runResourceJob({
+          workspaceId: account.workspaceId,
+          connectedAccountId: account.id,
+          resource: r,
+          reason,
+        });
+        processed += result.itemCount;
+        this.logger.log(
+          {
+            connectedAccountId: account.id,
+            resource: r,
+            itemCount: result.itemCount,
+            stub: result.stub,
+          },
+          'Inline sync resource finished',
+        );
+      } catch (error) {
+        this.logger.warn(
+          {
+            connectedAccountId: account.id,
+            resource: r,
+            err: error instanceof Error ? error.message : String(error),
+          },
+          'Inline sync resource failed',
+        );
+      }
+    }
+    return processed;
+  }
+
+  private inlineResourcesFor(provider: IntegrationProvider): SyncResource[] {
+    if (provider === IntegrationProvider.google) {
+      return [SyncResource.email, SyncResource.calendar];
+    }
+    if (provider === IntegrationProvider.microsoft) {
+      return [SyncResource.email, SyncResource.calendar];
+    }
+    return [];
   }
 
   private async requireAccount(
