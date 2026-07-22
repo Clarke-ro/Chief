@@ -265,12 +265,45 @@ npm run test:e2e
 
 ---
 
+## Google Workspace access (anyone can connect)
+
+Chief account sign-up is email/password. **Connecting Google** (Gmail, Calendar, Tasks, Drive) goes through Google’s OAuth consent screen.
+
+While the consent screen is in **Testing**, only emails listed under **Test users** can connect. Everyone else sees Google’s “app has not completed verification” / access blocked screen.
+
+### Until verification is approved
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services** → **OAuth consent screen**
+2. Keep **User type** = **External**
+3. Under **Audience → Test users**, add every person who should connect Google
+4. Confirm APIs are enabled: Gmail, Google Calendar, Google Drive, Google Tasks
+5. Confirm the OAuth client redirect URI matches your production API callback  
+   (`…/v1/integrations/oauth/google/callback`)
+
+### Open connect to any Google account
+
+1. Same consent screen → fill app name, support email, developer contact, logo, and home / privacy / terms links
+2. Confirm scopes Chief requests (openid, email, profile, Gmail modify, Calendar, Drive readonly, Tasks)
+3. **Publishing status** → **Publish app** (Testing → In production)
+4. Submit **Google verification** for sensitive/restricted scopes — Google typically asks for:
+   - Privacy policy URL (public HTTPS)
+   - App home / demo video showing the OAuth + data use flow
+   - Written justification for each sensitive scope
+5. After Google approves, any Google account can connect without being a test user
+
+Until step 4–5 finish, **Publish app** alone is not enough for unrestricted Gmail/Calendar access — keep using Test users for beta.
+
+More deploy/OAuth detail: `backend/RAILWAY.md`.
+
+---
+
 ## Roadmap
 
-1. **Executable actions** — deeper handoffs into Gmail, Calendar, and billing flows
-2. **Tasks & schedule** — continue hardening the live day plan
-3. **Provider expansion** — harden Google; deepen Slack / GitHub / Notion where valuable
-4. **Production hardening** — reliable migrations, observability, rate limits, E2E CI, App Store / Play + web launch
+1. **Google OAuth verification** — finish Cloud Console verification so any user can Connect Google
+2. **Executable actions** — deeper handoffs into Gmail, Calendar, and billing flows
+3. **Tasks & schedule** — continue hardening the live day plan
+4. **Provider expansion** — harden Google; deepen Slack / GitHub / Notion where valuable
+5. **Production hardening** — reliable migrations, observability, rate limits, E2E CI, App Store / Play + web launch
 
 ---
 
