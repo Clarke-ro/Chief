@@ -96,8 +96,8 @@ const styles = StyleSheet.create({
   },
   brand: {
     ...typography.display,
-    fontSize: 40,
-    lineHeight: 44,
+    fontSize: 44,
+    lineHeight: 50,
     letterSpacing: -1.2,
     fontWeight: '600',
   },
@@ -118,8 +118,8 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   cardTitle: {
-    fontSize: 17,
-    lineHeight: 22,
+    fontSize: 18,
+    lineHeight: 24,
     fontWeight: '600',
     textAlign: 'center',
   },

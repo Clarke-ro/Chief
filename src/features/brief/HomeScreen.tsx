@@ -548,8 +548,8 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     color: '#FFFFFF',
-    fontSize: 10,
-    lineHeight: 12,
+    fontSize: 11,
+    lineHeight: 13,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
@@ -572,10 +572,10 @@ const styles = StyleSheet.create({
     gap: spacing[8],
   },
   focusNumber: {
-    width: 24,
+    width: 26,
     textAlign: 'center',
-    fontSize: 22,
-    lineHeight: 26,
+    fontSize: 24,
+    lineHeight: 28,
     fontFamily: fontFamily.bold,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
@@ -608,8 +608,8 @@ const styles = StyleSheet.create({
   },
   focusApp: {
     ...typography.caption,
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 13,
+    lineHeight: 16,
     fontWeight: '600',
     flexShrink: 1,
     minWidth: 0,
@@ -623,8 +623,8 @@ const styles = StyleSheet.create({
   },
   focusTime: {
     ...typography.caption,
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 13,
+    lineHeight: 16,
     fontWeight: '500',
   },
   focusTitleRow: {

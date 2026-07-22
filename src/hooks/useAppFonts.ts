@@ -1,8 +1,24 @@
+import {
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+  useFonts,
+} from '@expo-google-fonts/plus-jakarta-sans';
+import { Platform } from 'react-native';
+
 /**
- * Fonts are optional for Expo Go boot.
- * Loading @expo-google-fonts/inter → expo-font → expo-asset can crash when
- * native Expo modules are not registered yet. Use system fonts instead.
+ * Loads Plus Jakarta Sans on native. Web uses the CSS family from `public/index.html`
+ * so text paints immediately without blocking the first frame.
  */
 export function useAppFonts(): boolean {
-  return true;
+  const [loaded] = useFonts({
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+  });
+
+  if (Platform.OS === 'web') return true;
+  return loaded;
 }
