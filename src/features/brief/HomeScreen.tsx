@@ -228,6 +228,9 @@ export function HomeScreen() {
   }, []);
 
   const openNotifications = useCallback(() => {
+    // PWA: RN Modal does not trap focus — close search so taps/typing don't hit SearchBar under the sheet.
+    setShowSearch(false);
+    setQuery('');
     setInboxOpen(true);
   }, []);
 
@@ -352,7 +355,7 @@ export function HomeScreen() {
               Top Priorities Today
             </Text>
 
-            {showSearch ? (
+            {showSearch && !inboxOpen ? (
               <View style={styles.searchWrap}>
                 <SearchBar
                   value={query}

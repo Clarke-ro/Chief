@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { IntegrationProvider, TaskSection, TaskStatus } from '@prisma/client';
 import type { AuthUser } from '../auth/decorators/current-user.decorator';
 import { BriefingService } from '../briefing/briefing.service';
@@ -27,6 +27,8 @@ function clip(value: string | null | undefined, max = SNIPPET_MAX): string {
  */
 @Injectable()
 export class ContextEngineService {
+  private readonly logger = new Logger(ContextEngineService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly briefing: BriefingService,
@@ -118,24 +120,7 @@ export class ContextEngineService {
           description: true,
         },
       }),
-      this.prisma.providerMessage.findMany({
-        where: {
-          workspaceId: wsId,
-          provider: IntegrationProvider.slack,
-          OR: [
-            { sentAt: { gte: emailSince } },
-            { sentAt: null, syncedAt: { gte: emailSince } },
-          ],
-        },
-        orderBy: [{ sentAt: 'desc' }],
-        take: SLACK_LIMIT,
-        select: {
-          id: true,
-          text: true,
-          channelName: true,
-          authorName: true,
-        },
-      }),
+      this.loadSlackMessages(wsId, emailSince),
     ]);
 
     const priorities = brief.focus.slice(0, 5).map((item) => ({
@@ -216,5 +201,45 @@ export class ContextEngineService {
     };
 
     return { workspaceId: wsId, context };
+  }
+
+  /** Soft-fail when provider_message migration hasn't landed yet. */
+  private async loadSlackMessages(
+    workspaceId: string,
+    since: Date,
+  ): Promise<
+    Array<{
+      id: string;
+      text: string | null;
+      channelName: string | null;
+      authorName: string | null;
+    }>
+  > {
+    try {
+      return await this.prisma.providerMessage.findMany({
+        where: {
+          workspaceId,
+          provider: IntegrationProvider.slack,
+          OR: [{ sentAt: { gte: since } }, { sentAt: null, syncedAt: { gte: since } }],
+        },
+        orderBy: [{ sentAt: 'desc' }],
+        take: SLACK_LIMIT,
+        select: {
+          id: true,
+          text: true,
+          channelName: true,
+          authorName: true,
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        {
+          err: error instanceof Error ? error.message : String(error),
+          workspaceId,
+        },
+        'provider_message unavailable — Chief chat continuing without Slack context',
+      );
+      return [];
+    }
   }
 }
