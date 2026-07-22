@@ -315,12 +315,14 @@ export function ChiefScreen() {
               </View>
             </>
           ) : (
-            <Pressable
-              style={[styles.center, { paddingBottom: footerPad }]}
-              onPress={dismissKeyboard}
-              accessible={false}
-            >
-              <View style={styles.askBlock}>
+            <View style={[styles.center, { paddingBottom: footerPad }]}>
+              {/* Background dismiss only — never wrap the TextInput in Pressable (web steals focus). */}
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={dismissKeyboard}
+                accessible={false}
+              />
+              <View style={styles.askBlock} pointerEvents="box-none">
                 <ChiefComposer
                   value={draft}
                   onChangeText={setDraft}
@@ -328,7 +330,7 @@ export function ChiefScreen() {
                   disabled={thinking}
                 />
               </View>
-            </Pressable>
+            </View>
           )}
         </KeyboardAvoidingView>
       </View>
