@@ -265,45 +265,47 @@ npm run test:e2e
 
 ---
 
-## Google Workspace access (anyone can connect)
+## How Codex was used
 
-Chief account sign-up is email/password. **Connecting Google** (Gmail, Calendar, Tasks, Drive) goes through Google’s OAuth consent screen.
+[OpenAI Codex](https://openai.com/codex/) (and Codex-class agent workflows in Cursor) drove **implementation velocity** across the monorepo — not as a substitute for product judgment, but as a coding agent that read the codebase, applied surgical changes, ran checks, and shipped when asked.
 
-While the consent screen is in **Testing**, only emails listed under **Test users** can connect. Everyone else sees Google’s “app has not completed verification” / access blocked screen.
+Concrete areas Codex executed:
 
-### Until verification is approved
+- **Backend foundation** — Nest modules for auth (Better Auth sessions), workspaces/membership, integrations OAuth, sync pipeline, briefing, notifications, reasoning / Ask Chief chat, and BullMQ workers
+- **Provider adapters** — Google (Gmail, Calendar, Tasks, Drive), plus Slack, GitHub, and Notion connect/sync paths where wired
+- **Expo app** — Expo Router screens (onboarding, Home brief, Focus, Today, Profile, Chief), Zustand stores, repositories talking to the live API, secure session + local cache wipe on logout
+- **Workspace Engine presentation** — Focus/Brief dedupe, expand summaries, narrative synthesis plumbing, freshness labels, and alerts inbox UX
+- **Ask Chief** — live chat client + context engine payload path; resilience when provider tables lagged migrations; composer focus fixes on web/PWA
+- **PWA / deploy** — web manifest, Workbox service worker build, install/offline banners, Vercel export pipeline; Railway `api` + `worker` deploy loops and role fixes
+- **Brand & UI** — official logo assets for shell vs in-app mark; Plus Jakarta Sans type system with a chat-specific scale
+- **Repo hygiene** — targeted diffs, typechecks/lint when relevant, README as the single public guide, commits and pushes when requested
 
-1. Open [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services** → **OAuth consent screen**
-2. Keep **User type** = **External**
-3. Under **Audience → Test users**, add every person who should connect Google
-4. Confirm APIs are enabled: Gmail, Google Calendar, Google Drive, Google Tasks
-5. Confirm the OAuth client redirect URI matches your production API callback  
-   (`…/v1/integrations/oauth/google/callback`)
+Codex was the **execution layer**: scaffold, wire, fix, verify, deploy.
 
-### Open connect to any Google account
+---
 
-1. Same consent screen → fill app name, support email, developer contact, logo, and home / privacy / terms links
-2. Confirm scopes Chief requests (openid, email, profile, Gmail modify, Calendar, Drive readonly, Tasks)
-3. **Publishing status** → **Publish app** (Testing → In production)
-4. Submit **Google verification** for sensitive/restricted scopes — Google typically asks for:
-   - Privacy policy URL (public HTTPS)
-   - App home / demo video showing the OAuth + data use flow
-   - Written justification for each sensitive scope
-5. After Google approves, any Google account can connect without being a test user
+## How GPT-5.6 was used
 
-Until step 4–5 finish, **Publish app** alone is not enough for unrestricted Gmail/Calendar access — keep using Test users for beta.
+**GPT-5.6** shaped **what “good” looks like** — product reasoning and language design that Codex then implemented:
 
-More deploy/OAuth detail: `backend/RAILWAY.md`.
+- Framing Chief as a **chief of staff** vs an email client (outcomes and next actions over inbox mirroring)
+- Designing Focus / Brief copy patterns — imperative headlines, section grouping, contextual CTAs, no raw body dumps
+- Turning chief-of-staff briefing patterns into concrete UX rules for Home, Focus detail, and alerts
+- Spec’ing the Workspace Engine narrative layer (`synthesizeFocusNarrative`: about / action / brief bullets) so every surface communicates *what’s going on* and *what to do*
+- Grounding **Ask Chief** in structured workspace context (priorities, calendar, mail, tasks) rather than pasting a mailbox into the model
+- Planning post–Build Week phases (executable actions, live chat, tasks hardening, provider expansion, production readiness) without redesigning the whole product each time
+- Guiding PWA and brand decisions at a product level (installable web shell, outside vs inside marks) while keeping the design system coherent
+
+Where Codex executed changes, GPT-5.6 owned **product judgment, copy architecture, and roadmap framing**.
 
 ---
 
 ## Roadmap
 
-1. **Google OAuth verification** — finish Cloud Console verification so any user can Connect Google
-2. **Executable actions** — deeper handoffs into Gmail, Calendar, and billing flows
-3. **Tasks & schedule** — continue hardening the live day plan
-4. **Provider expansion** — harden Google; deepen Slack / GitHub / Notion where valuable
-5. **Production hardening** — reliable migrations, observability, rate limits, E2E CI, App Store / Play + web launch
+1. **Executable actions** — deeper handoffs into Gmail, Calendar, and billing flows
+2. **Tasks & schedule** — continue hardening the live day plan
+3. **Provider expansion** — harden Google; deepen Slack / GitHub / Notion where valuable
+4. **Production hardening** — reliable migrations, observability, rate limits, E2E CI, App Store / Play + web launch
 
 ---
 
