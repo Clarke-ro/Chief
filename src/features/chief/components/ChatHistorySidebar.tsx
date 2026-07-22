@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GroupedCard } from '@/components/ui';
 import type { ChatSession } from '@/features/chief/types';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { fontFamily, radius, spacing, typography } from '@/theme';
+import { chatTypography, fontFamily, radius, spacing } from '@/theme';
 
 type ChatHistorySidebarProps = {
   sessions: ChatSession[];
@@ -145,13 +145,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
   },
   searchInput: {
-    ...typography.body,
+    ...chatTypography.body,
     fontFamily: fontFamily.regular,
     flex: 1,
     paddingVertical: spacing[8],
   },
   sectionLabel: {
-    ...typography.caption,
+    ...chatTypography.caption,
     fontFamily: fontFamily.semibold,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     gap: spacing[4],
   },
   empty: {
-    ...typography.footnote,
+    ...chatTypography.footnote,
     paddingVertical: spacing[16],
   },
   card: {
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[8],
   },
   chatTitle: {
-    ...typography.body,
+    ...chatTypography.body,
     fontSize: 16,
     lineHeight: 22,
   },

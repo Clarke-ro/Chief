@@ -2,7 +2,7 @@ import { PanelLeft, Plus } from 'lucide-react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { fontFamily, radius, spacing, typography } from '@/theme';
+import { chatTypography, fontFamily, radius, spacing } from '@/theme';
 
 type ChiefHeaderProps = {
   showHistoryToggle?: boolean;
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   title: {
-    ...typography.title3,
+    ...chatTypography.title3,
     fontFamily: fontFamily.semibold,
     letterSpacing: -0.3,
     flex: 1,

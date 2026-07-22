@@ -3,7 +3,7 @@ import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 import { TypewriterPhrase } from '@/components/ui';
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { fontFamily, radius, spacing, typography } from '@/theme';
+import { chatTypography, fontFamily, radius, spacing } from '@/theme';
 
 /** Workspace / priorities / brief prompts for the empty-state typewriter. */
 export const CHIEF_ASK_PHRASES = [
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
     gap: spacing[12],
   },
   heading: {
-    ...typography.title2,
+    ...chatTypography.title2,
     fontFamily: fontFamily.semibold,
     letterSpacing: -0.4,
     textAlign: 'center',
@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   input: {
-    ...typography.body,
+    ...chatTypography.body,
     fontFamily: fontFamily.regular,
     width: '100%',
     maxHeight: 120,

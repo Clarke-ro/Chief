@@ -13,7 +13,7 @@ import { ChiefThinking } from '@/features/chief/components/ChiefThinking';
 import type { ConversationTurn } from '@/features/chief/types';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { useCanvasStore } from '@/stores';
-import { fontFamily, radius, spacing, typography } from '@/theme';
+import { chatTypography, fontFamily, radius, spacing } from '@/theme';
 
 type ConversationThreadProps = {
   turns: ConversationTurn[];
@@ -131,8 +131,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: radius.sm,
   },
   userText: {
-    ...typography.body,
-    lineHeight: 24,
+    ...chatTypography.body,
   },
   chiefBlock: {
     gap: spacing[12],
@@ -163,7 +162,7 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   actionsLead: {
-    ...typography.footnote,
+    ...chatTypography.footnote,
     fontFamily: fontFamily.regular,
   },
   actionRow: {

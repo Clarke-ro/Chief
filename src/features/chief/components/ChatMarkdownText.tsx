@@ -2,7 +2,7 @@ import { Fragment, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { fontFamily, spacing, typography } from '@/theme';
+import { chatTypography, fontFamily, spacing } from '@/theme';
 
 type ChatMarkdownTextProps = {
   content: string;
@@ -113,8 +113,7 @@ const styles = StyleSheet.create({
     gap: spacing[12],
   },
   body: {
-    ...typography.body,
-    lineHeight: 26,
+    ...chatTypography.body,
   },
   list: {
     gap: spacing[4],
@@ -125,8 +124,7 @@ const styles = StyleSheet.create({
     gap: spacing[8],
   },
   bullet: {
-    ...typography.body,
-    lineHeight: 26,
+    ...chatTypography.body,
     width: 14,
   },
 });

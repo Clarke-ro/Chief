@@ -10,7 +10,7 @@ import Animated, {
 
 import { ChiefLogo } from '@/features/chief/components/ChiefLogo';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { spacing, typography } from '@/theme';
+import { chatTypography, spacing } from '@/theme';
 
 /** Pulsing Chief mark shown while a reply is in flight. */
 export function ChiefThinking() {
@@ -57,6 +57,6 @@ const styles = StyleSheet.create({
     height: 28,
   },
   label: {
-    ...typography.footnote,
+    ...chatTypography.footnote,
   },
 });
