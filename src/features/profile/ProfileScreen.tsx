@@ -519,6 +519,21 @@ export function ProfileScreen() {
               />
             </SettingsGroup>
 
+            <SettingsGroup
+              title="Legal"
+              description="Policies that govern your use of Chief and connected apps."
+            >
+              <SettingRow
+                title="Privacy Policy"
+                onPress={() => router.push('/legal/privacy')}
+              />
+              <SettingRow
+                title="Terms of Service"
+                onPress={() => router.push('/legal/terms')}
+                isLast
+              />
+            </SettingsGroup>
+
             <SettingsGroup>
               <SettingRow
                 title={loggingOut ? 'Signing out…' : 'Log Out'}

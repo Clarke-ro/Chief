@@ -1,20 +1,33 @@
 import { useRouter } from 'expo-router';
-import { ArrowRight } from 'lucide-react-native';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ArrowRight, Check } from 'lucide-react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { ChiefLogo } from '@/features/chief/components/ChiefLogo';
 import { OnboardingCopy } from '@/features/onboarding/components/OnboardingCopy';
 import { OnboardingShell } from '@/features/onboarding/components/OnboardingShell';
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { useThemeColors } from '@/hooks/useThemeColors';
+import { notifyAlert } from '@/services/confirm';
 import { radius, spacing, typography } from '@/theme';
 
-/** Brand-first welcome — logo + one CTA into auth. */
+/** Brand-first welcome — logo + agreement + CTA into auth. */
 export function WelcomeScreen() {
   const colors = useThemeColors();
   const scheme = useResolvedColorScheme();
   const router = useRouter();
-  const goAuth = () => router.push('/onboarding/auth');
+  const [agreed, setAgreed] = useState(false);
+
+  const goAuth = () => {
+    if (!agreed) {
+      notifyAlert(
+        'Agreement required',
+        'Please agree to the Terms of Service and Privacy Policy to continue.',
+      );
+      return;
+    }
+    router.push('/onboarding/auth');
+  };
 
   const isLight = scheme === 'light';
   const titleColor = isLight ? '#111113' : colors.text;
@@ -41,9 +54,49 @@ export function WelcomeScreen() {
         </View>
 
         <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: agreed }}
+            accessibilityLabel="I agree to the Terms of Service and Privacy Policy"
+            onPress={() => setAgreed((v) => !v)}
+            style={styles.agreeRow}
+          >
+            <View
+              style={[
+                styles.checkbox,
+                {
+                  borderColor: agreed ? colors.accent : colors.border,
+                  backgroundColor: agreed ? colors.accent : 'transparent',
+                },
+              ]}
+            >
+              {agreed ? <Check size={14} color="#FFFFFF" strokeWidth={3} /> : null}
+            </View>
+            <Text style={[styles.agreeText, { color: colors.textSecondary }]}>
+              I agree to the{' '}
+              <Text
+                accessibilityRole="link"
+                onPress={() => router.push('/legal/terms')}
+                style={[styles.agreeLink, { color: colors.accent }]}
+              >
+                Terms of Service
+              </Text>
+              {' '}and{' '}
+              <Text
+                accessibilityRole="link"
+                onPress={() => router.push('/legal/privacy')}
+                style={[styles.agreeLink, { color: colors.accent }]}
+              >
+                Privacy Policy
+              </Text>
+              .
+            </Text>
+          </Pressable>
+
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel="Get started"
+            accessibilityState={{ disabled: !agreed }}
             activeOpacity={0.85}
             onPress={goAuth}
             style={[
@@ -51,6 +104,7 @@ export function WelcomeScreen() {
               {
                 backgroundColor: colors.bgElevated,
                 borderColor: colors.border,
+                opacity: agreed ? 1 : 0.55,
               },
             ]}
           >
@@ -63,9 +117,10 @@ export function WelcomeScreen() {
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel="I already have an account"
+            accessibilityState={{ disabled: !agreed }}
             activeOpacity={0.55}
             onPress={goAuth}
-            style={styles.secondary}
+            style={[styles.secondary, { opacity: agreed ? 1 : 0.55 }]}
           >
             <Text style={[styles.secondaryLabel, { color: colors.textSecondary }]}>
               I already have an account
@@ -106,6 +161,31 @@ const styles = StyleSheet.create({
     gap: spacing[12],
     paddingTop: spacing[24],
     flexShrink: 0,
+  },
+  agreeRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing[12],
+    paddingVertical: spacing[4],
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.sm,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  agreeText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  agreeLink: {
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   card: {
     width: '100%',
