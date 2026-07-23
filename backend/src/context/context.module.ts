@@ -1,11 +1,9 @@
 ﻿import { Module } from '@nestjs/common';
-import { BriefingModule } from '../briefing/briefing.module';
-import { MembershipModule } from '../membership/membership.module';
-import { WorkspaceModule } from '../workspace/workspace.module';
+import { WorkspaceEngineModule } from '../workspace-engine/workspace-engine.module';
 import { ContextEngineService } from './context-engine.service';
 
 @Module({
-  imports: [BriefingModule, WorkspaceModule, MembershipModule],
+  imports: [WorkspaceEngineModule],
   providers: [ContextEngineService],
   exports: [ContextEngineService],
 })

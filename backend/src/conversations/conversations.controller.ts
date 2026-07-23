@@ -1,5 +1,6 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import {
   CurrentUser,
   type AuthUser,
@@ -31,5 +32,41 @@ export class ConversationsController {
       provider: result.provider,
       model: result.model,
     };
+  }
+
+  @Post('chat/stream')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Ask Chief with NDJSON token stream (same pipeline as /chat; additive)',
+  })
+  async chatStream(
+    @CurrentUser() user: AuthUser,
+    @Body() body: ChiefChatBodyDto,
+    @Res() res: Response,
+  ) {
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    try {
+      for await (const event of this.reasoning.chatStream(user, {
+        message: body.message,
+        workspaceId: body.workspaceId,
+        focusId: body.focusId,
+        history: body.history,
+      })) {
+        res.write(`${JSON.stringify(event)}\n`);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Chief stream failed.';
+      res.write(
+        `${JSON.stringify({ type: 'error', message })}\n`,
+      );
+    } finally {
+      res.end();
+    }
   }
 }

@@ -15,8 +15,10 @@ import { ConversationsModule } from './conversations/conversations.module';
 import { GraphModule } from './graph/graph.module';
 import { HealthModule } from './health/health.module';
 import { IntegrationsModule } from './integrations/integrations.module';
+import { KnowledgeModule } from './knowledge/knowledge.module';
 import { MembershipModule } from './membership/membership.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PlannerModule } from './planner/planner.module';
 import { ProfileModule } from './profile/profile.module';
 import { PromptModule } from './prompt/prompt.module';
 import { RealtimeModule } from './realtime/realtime.module';
@@ -26,6 +28,7 @@ import { SettingsModule } from './settings/settings.module';
 import { SyncModule } from './sync/sync.module';
 import { TasksModule } from './tasks/tasks.module';
 import { UsersModule } from './users/users.module';
+import { WorkspaceEngineModule } from './workspace-engine/workspace-engine.module';
 import { WorkspaceModule } from './workspace/workspace.module';
 
 @Module({
@@ -70,6 +73,9 @@ import { WorkspaceModule } from './workspace/workspace.module';
     IntegrationsModule,
     SyncModule,
     GraphModule,
+    KnowledgeModule,
+    WorkspaceEngineModule,
+    PlannerModule,
     ContextModule,
     PromptModule,
     AiModule,

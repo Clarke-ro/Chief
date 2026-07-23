@@ -64,6 +64,7 @@ export function ChiefScreen() {
   const appendChiefTurns = useWorkspaceStore((s) => s.appendChiefTurns);
   const appendUserTurn = useWorkspaceStore((s) => s.appendUserTurn);
   const appendChiefReply = useWorkspaceStore((s) => s.appendChiefReply);
+  const upsertChiefReply = useWorkspaceStore((s) => s.upsertChiefReply);
   const [draft, setDraft] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -129,20 +130,42 @@ export function ChiefScreen() {
           : undefined;
 
       void (async () => {
+        const chiefId = `c-${Date.now() + 1}`;
+        let streamed = '';
+        let started = false;
+
         try {
           if (!chiefChatRepository.shouldUseLiveChat()) {
             appendChiefReply(offlineChiefReply(text));
             return;
           }
 
-          const live = await chiefChatRepository.send(text, {
-            history,
-            focusId,
-          });
-          appendChiefReply({
-            id: `c-${Date.now() + 1}`,
+          const live = await chiefChatRepository.sendStream(
+            text,
+            { history, focusId },
+            (delta) => {
+              streamed += delta;
+              if (!started) {
+                started = true;
+                setThinking(false);
+              }
+              upsertChiefReply({
+                id: chiefId,
+                role: 'chief',
+                content: streamed,
+              });
+            },
+          );
+
+          const finalContent =
+            live.content.trim() ||
+            streamed.trim() ||
+            'I need a bit more context to help with that.';
+          if (!started) setThinking(false);
+          upsertChiefReply({
+            id: chiefId,
             role: 'chief',
-            content: live.content.trim() || 'I need a bit more context to help with that.',
+            content: finalContent,
           });
         } catch (error) {
           const detail =
@@ -154,17 +177,19 @@ export function ChiefScreen() {
               : error instanceof ApiNetworkError
                 ? error.message
                 : 'Something went wrong.';
-          appendChiefReply({
-            id: `c-${Date.now() + 1}`,
+          upsertChiefReply({
+            id: chiefId,
             role: 'chief',
-            content: `${detail} I couldn't finish this reply with your live workspace context.`,
+            content: streamed.trim()
+              ? streamed
+              : `${detail} I couldn't finish this reply with your live workspace context.`,
           });
         } finally {
           setThinking(false);
         }
       })();
     },
-    [appendChiefReply, appendUserTurn, params.focusId, thinking],
+    [appendChiefReply, appendUserTurn, params.focusId, thinking, upsertChiefReply],
   );
 
   /** Actionable → user bubble + intro + editable canvas; related chips (not Open Gmail) */

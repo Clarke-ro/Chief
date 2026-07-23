@@ -86,4 +86,66 @@ export class GeminiService {
       'Chief could not reach Gemini. Try again shortly.',
     );
   }
+
+  /**
+   * Stream token deltas when the SDK supports generateContentStream.
+   */
+  async *streamChiefReply(input: {
+    instructions: string;
+    userPayload: string;
+  }): AsyncGenerator<
+    | { type: 'delta'; text: string }
+    | { type: 'done'; content: string; provider: 'gemini'; model: string }
+  > {
+    const client = this.getClient();
+    const models = this.modelCandidates();
+    let lastError = 'Unknown Gemini stream error';
+
+    for (const model of models) {
+      try {
+        const stream = await client.models.generateContentStream({
+          model,
+          contents: input.userPayload,
+          config: {
+            systemInstruction: input.instructions,
+          },
+        });
+
+        let content = '';
+        for await (const chunk of stream) {
+          const text = chunk.text;
+          if (text) {
+            content += text;
+            yield { type: 'delta', text };
+          }
+        }
+
+        const trimmed = content.trim();
+        if (!trimmed) {
+          lastError = `Gemini ${model} stream returned empty text`;
+          this.logger.warn(lastError);
+          continue;
+        }
+
+        if (model !== this.config.ai.geminiModel) {
+          this.logger.warn(`Gemini stream used fallback model ${model}`);
+        }
+
+        yield {
+          type: 'done',
+          content: trimmed,
+          provider: 'gemini',
+          model,
+        };
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : 'Unknown Gemini stream error';
+        this.logger.warn(`Gemini stream model ${model} failed: ${lastError}`);
+      }
+    }
+
+    throw new ServiceUnavailableException(
+      `Chief could not stream from Gemini: ${lastError}`,
+    );
+  }
 }

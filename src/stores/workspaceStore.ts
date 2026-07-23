@@ -67,6 +67,8 @@ type WorkspaceState = {
   appendUserTurn: (userTurn: ConversationTurn, titleSeed: string) => void;
   /** Chief — append Chief reply to the active session. */
   appendChiefReply: (chiefTurn: ConversationTurn) => void;
+  /** Chief — insert or replace a Chief turn by id (streaming). */
+  upsertChiefReply: (chiefTurn: ConversationTurn) => void;
 
   /** After log out — reload empty slices into memory (storage already cleared). */
   resetAfterLogout: () => void;
@@ -525,6 +527,27 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         ...session,
         updatedAt: 'Just now',
         turns: [...session.turns, chiefTurn],
+      };
+    });
+    persistSessions(next);
+    set({ sessions: next });
+  },
+
+  upsertChiefReply: (chiefTurn) => {
+    const { activeSessionId, sessions } = get();
+    if (!activeSessionId) return;
+
+    const next = sessions.map((session) => {
+      if (session.id !== activeSessionId) return session;
+      const index = session.turns.findIndex((turn) => turn.id === chiefTurn.id);
+      const turns =
+        index >= 0
+          ? session.turns.map((turn, i) => (i === index ? chiefTurn : turn))
+          : [...session.turns, chiefTurn];
+      return {
+        ...session,
+        updatedAt: 'Just now',
+        turns,
       };
     });
     persistSessions(next);
