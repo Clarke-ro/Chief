@@ -67,8 +67,14 @@ type WorkspaceState = {
   appendUserTurn: (userTurn: ConversationTurn, titleSeed: string) => void;
   /** Chief — append Chief reply to the active session. */
   appendChiefReply: (chiefTurn: ConversationTurn) => void;
-  /** Chief — insert or replace a Chief turn by id (streaming). */
-  upsertChiefReply: (chiefTurn: ConversationTurn) => void;
+  /**
+   * Chief — insert or replace a Chief turn by id (streaming).
+   * Pass `{ persist: false }` while tokens arrive; persist on the final upsert.
+   */
+  upsertChiefReply: (
+    chiefTurn: ConversationTurn,
+    options?: { persist?: boolean },
+  ) => void;
 
   /** After log out — reload empty slices into memory (storage already cleared). */
   resetAfterLogout: () => void;
@@ -533,7 +539,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({ sessions: next });
   },
 
-  upsertChiefReply: (chiefTurn) => {
+  upsertChiefReply: (chiefTurn, options) => {
     const { activeSessionId, sessions } = get();
     if (!activeSessionId) return;
 
@@ -550,7 +556,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         turns,
       };
     });
-    persistSessions(next);
+    if (options?.persist !== false) {
+      persistSessions(next);
+    }
     set({ sessions: next });
   },
 

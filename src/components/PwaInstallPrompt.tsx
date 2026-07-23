@@ -29,12 +29,15 @@ export function PwaInstallPrompt() {
     await promptInstall();
   };
 
+  // Sit above the tab bar so the install card doesn't cover nav buttons.
+  const tabBarClearance = 56 + Math.max(insets.bottom, 0);
+
   return (
     <View
       style={[
         styles.wrap,
         {
-          bottom: Math.max(insets.bottom, spacing[12]) + spacing[8],
+          bottom: tabBarClearance + spacing[8],
           backgroundColor: colors.bgElevated,
           borderColor: colors.border,
         },

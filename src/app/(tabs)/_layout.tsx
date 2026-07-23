@@ -3,11 +3,15 @@ import { Redirect, Tabs } from 'expo-router';
 import { CalendarDays, ChartNoAxesCombined, Home, User } from 'lucide-react-native';
 import { memo, useEffect } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, View, type ColorValue } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChiefLogo } from '@/features/chief/components/ChiefLogo';
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { ensureSessionBoot, useSessionBootStore } from '@/stores';
+
+/** Default tab bar content height (icons + labels) before safe-area padding. */
+const TAB_BAR_CONTENT_HEIGHT = 49;
 
 type TabIconProps = { color: ColorValue; size: number };
 
@@ -30,6 +34,7 @@ const ProfileIcon = memo(function ProfileIcon({ color, size }: TabIconProps) {
 export default function TabsLayout() {
   const scheme = useResolvedColorScheme();
   const colors = useThemeColors();
+  const insets = useSafeAreaInsets();
   const ready = useSessionBootStore((s) => s.ready);
   const hasSession = useSessionBootStore((s) => s.hasSession);
 
@@ -48,6 +53,9 @@ export default function TabsLayout() {
   if (!hasSession) {
     return <Redirect href="/onboarding" />;
   }
+
+  // Keep tab icons/labels above the system gesture / 3-button nav bar (edge-to-edge).
+  const bottomInset = insets.bottom;
 
   return (
     <Tabs
@@ -68,6 +76,9 @@ export default function TabsLayout() {
           {
             backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.bgElevated,
             borderTopColor: colors.border,
+            // Explicit height + padding so edge-to-edge system nav doesn't cover tab buttons.
+            height: TAB_BAR_CONTENT_HEIGHT + bottomInset,
+            paddingBottom: bottomInset,
           },
         ],
         tabBarBackground: () =>

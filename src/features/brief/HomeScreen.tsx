@@ -59,6 +59,7 @@ function groupByBriefSection<T extends { section?: string; platform: PlatformId 
     'Security',
     'Finance',
     'Career',
+    'Calendar',
     'Meetings',
     'Projects',
     'Updates',
@@ -81,7 +82,7 @@ function groupByBriefSection<T extends { section?: string; platform: PlatformId 
 function fallbackSection(platform: PlatformId): string {
   switch (platform) {
     case 'calendar':
-      return 'Meetings';
+      return 'Calendar';
     case 'github':
     case 'notion':
     case 'asana':
@@ -93,6 +94,9 @@ function fallbackSection(platform: PlatformId): string {
       return 'Updates';
   }
 }
+
+/** Initial Top Priorities shown before "View more". */
+const FOCUS_PREVIEW_COUNT = 6;
 
 /** Home — AI briefing: "What should I do today?" */
 export function HomeScreen() {
@@ -110,6 +114,7 @@ export function HomeScreen() {
   const [query, setQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [focusExpanded, setFocusExpanded] = useState(false);
   const [workspaceId, setWorkspaceId] = useState<string | undefined>();
   const [unreadCount, setUnreadCount] = useState(0);
   const dateLabel = useMemo(() => formatTodayLabel(), []);
@@ -128,6 +133,20 @@ export function HomeScreen() {
     );
     return groupByBriefSection(unique);
   }, [brief.briefing, brief.focus]);
+
+  const visibleFocus = useMemo(() => {
+    if (focusExpanded || brief.focus.length <= FOCUS_PREVIEW_COUNT) {
+      return brief.focus;
+    }
+    return brief.focus.slice(0, FOCUS_PREVIEW_COUNT);
+  }, [brief.focus, focusExpanded]);
+  const hiddenFocusCount = Math.max(0, brief.focus.length - FOCUS_PREVIEW_COUNT);
+
+  useEffect(() => {
+    if (brief.focus.length <= FOCUS_PREVIEW_COUNT) {
+      setFocusExpanded(false);
+    }
+  }, [brief.focus.length]);
 
   const kickedSync = useRef(false);
   const kickedPush = useRef(false);
@@ -382,12 +401,12 @@ export function HomeScreen() {
                 />
               ) : (
                 <View style={styles.focusGroups}>
-                  {brief.focus.map((item, index) => (
+                  {visibleFocus.map((item, index) => (
                     <View
                       key={item.id}
                       style={[
                         styles.focusRow,
-                        index < brief.focus.length - 1 && {
+                        index < visibleFocus.length - 1 && {
                           borderBottomWidth: StyleSheet.hairlineWidth,
                           borderBottomColor: colors.border,
                           paddingBottom: spacing[16],
@@ -449,6 +468,34 @@ export function HomeScreen() {
                       </View>
                     </View>
                   ))}
+                  {hiddenFocusCount > 0 ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        focusExpanded
+                          ? 'Show fewer priorities'
+                          : `View ${hiddenFocusCount} more priorities`
+                      }
+                      onPress={() => setFocusExpanded((open) => !open)}
+                      style={({ pressed }) => [
+                        styles.focusMore,
+                        pressed && { opacity: 0.72 },
+                      ]}
+                    >
+                      <Text style={[styles.focusMoreText, { color: colors.textSecondary }]}>
+                        {focusExpanded
+                          ? 'Show less'
+                          : `View more (${hiddenFocusCount})`}
+                      </Text>
+                      <View
+                        style={{
+                          transform: [{ rotate: focusExpanded ? '-90deg' : '90deg' }],
+                        }}
+                      >
+                        <ChevronRight size={14} color={colors.textTertiary} strokeWidth={2} />
+                      </View>
+                    </Pressable>
+                  ) : null}
                 </View>
               )}
             </HomeSection>
@@ -565,6 +612,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[20],
     paddingTop: spacing[4],
     paddingBottom: spacing[4],
+  },
+  focusMore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[4],
+    paddingTop: spacing[12],
+    paddingBottom: spacing[4],
+  },
+  focusMoreText: {
+    ...typography.subhead,
+    fontFamily: fontFamily.medium,
   },
   focusRow: {
     flexDirection: 'row',

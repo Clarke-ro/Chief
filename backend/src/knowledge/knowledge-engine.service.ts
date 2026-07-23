@@ -21,7 +21,7 @@ export function clipKnowledge(
 
 /**
  * Knowledge Engine — projects synced DB rows into structured, clipped knowledge.
- * Does not call the LLM.
+ * Calendar rows are time blocks (not assumed to be meetings). Does not call the LLM.
  */
 @Injectable()
 export class KnowledgeEngineService {

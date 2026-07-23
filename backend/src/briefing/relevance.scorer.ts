@@ -18,7 +18,7 @@ export type BriefSection =
   | 'Security'
   | 'Career'
   | 'Finance'
-  | 'Meetings'
+  | 'Calendar'
   | 'Projects'
   | 'Updates';
 
@@ -48,6 +48,22 @@ const HIGH_VALUE_PATTERNS =
 const ACTION_VERBS =
   /\b(submit|review|prepare|respond|reply|approve|confirm|schedule|send|finish|complete|fix|update|pay|sign)\b/i;
 
+/** Informational alerts — Brief-ok, rarely Focus. */
+const NOISE_ALERT_PATTERNS =
+  /\b(new device|unrecognised device|unrecognized (device|login|sign[- ]?in)|login alert|sign[- ]?in (from|alert|detected)|we (noticed|detected) a (new|sign)|security alert|verify it('s| was) you|was this you)\b/i;
+
+const ACTIONABLE_SECURITY =
+  /\b(unauthorized|account (locked|compromised|suspended)|reset your password|password reset required|suspicious (activity|attempt)|enable 2fa|mfa required|take action|secure your account)\b/i;
+
+const ACTIONABLE_PAYMENT =
+  /\b(payment failed|failed (charge|payment)|declined|past due|overdue (invoice|payment)|update (your )?(payment|card|billing)|insufficient funds|action required.*(pay|payment|card))\b/i;
+
+const MEETING_LIKE =
+  /\b(meeting|standup|stand-up|1:1|1\-1|sync|call|interview|demo|zoom|google meet|teams|huddle|retro|planning)\b/i;
+
+const NON_MEETING_CALENDAR =
+  /\b(focus time|hold|blocked|busy|ooo|out of office|travel|flight|doctor|dentist|appointment|holiday|pto|vacation|birthday|reminder)\b/i;
+
 /** Hard-reject promotional / low-signal mail. */
 export function isLowValueMail(input: ScoredText): boolean {
   const labels = input.labelIds ?? [];
@@ -75,9 +91,14 @@ export function classifyWorkKind(input: {
 }): WorkKind {
   const blob = `${input.title} ${input.snippet ?? ''} ${input.bodyText ?? ''}`;
 
-  if (input.kind === 'event') return 'meeting';
+  if (input.kind === 'event') {
+    // Calendar blocks are not automatically "meetings".
+    if (NON_MEETING_CALENDAR.test(blob)) return 'task';
+    if (MEETING_LIKE.test(blob)) return 'meeting';
+    return 'meeting';
+  }
   if (
-    /\b(security|password|verify|verification|2fa|mfa|new device|login alert|sign[- ]?in|unrecognized|suspicious|oauth|authorization|unauthorized access)\b/i.test(
+    /\b(security|password|verify|verification|2fa|mfa|new device|login alert|sign[- ]?in|unrecognized|unrecognised|suspicious|oauth|authorization|unauthorized access)\b/i.test(
       blob,
     )
   ) {
@@ -124,7 +145,7 @@ export function briefSectionFor(kind: WorkKind): BriefSection {
     case 'approval':
       return 'Finance';
     case 'meeting':
-      return 'Meetings';
+      return 'Calendar';
     case 'deadline':
       return 'Needs Attention';
     case 'document':
@@ -133,6 +154,57 @@ export function briefSectionFor(kind: WorkKind): BriefSection {
     default:
       return 'Updates';
   }
+}
+
+/**
+ * Top Priorities must be actionable work ("do something").
+ * Calendar / security / payment never enter Focus directly — only via
+ * conflict or related-priority synthesis in BriefingService.
+ */
+export function isFocusEligible(input: {
+  workKind: WorkKind;
+  title: string;
+  snippet?: string | null;
+  bodyText?: string | null;
+  source: 'email' | 'event' | 'task';
+}): boolean {
+  const blob = `${input.title} ${input.snippet ?? ''} ${input.bodyText ?? ''}`;
+
+  if (input.source === 'event') return false;
+
+  switch (input.workKind) {
+    case 'meeting':
+    case 'security':
+    case 'invoice':
+      return false;
+    case 'deadline':
+    case 'approval':
+    case 'document':
+    case 'task':
+    case 'career':
+      return true;
+    case 'email':
+      return (
+        ACTION_VERBS.test(blob) ||
+        /\b(reply|respond|please\s+(review|confirm|send|submit)|action required|needs? your)\b/i.test(
+          blob,
+        )
+      );
+    default:
+      return true;
+  }
+}
+
+/** Hold security / payment / login alerts until related to Top Priorities. */
+export function shouldDeferAlertSurfacing(
+  workKind: WorkKind,
+  title: string,
+  snippet?: string | null,
+  bodyText?: string | null,
+): boolean {
+  if (workKind === 'security' || workKind === 'invoice') return true;
+  const blob = `${title} ${snippet ?? ''} ${bodyText ?? ''}`;
+  return NOISE_ALERT_PATTERNS.test(blob);
 }
 
 export function scoreEmail(input: ScoredText & { isUnread?: boolean; receivedAt?: Date | null }): number {
@@ -144,15 +216,26 @@ export function scoreEmail(input: ScoredText & { isUnread?: boolean; receivedAt?
     4000,
   );
 
-  if (HIGH_VALUE_PATTERNS.test(blob)) score += 0.32;
-  if (ACTION_VERBS.test(blob)) score += 0.08;
+  const informationalAlert =
+    NOISE_ALERT_PATTERNS.test(blob) && !ACTIONABLE_SECURITY.test(blob);
+  const actionableSecurity = ACTIONABLE_SECURITY.test(blob);
+  const actionablePayment = ACTIONABLE_PAYMENT.test(blob);
+
+  if (actionableSecurity || actionablePayment) score += 0.34;
+  else if (informationalAlert) score += 0.12;
+  else if (HIGH_VALUE_PATTERNS.test(blob)) score += 0.28;
+
+  if (ACTION_VERBS.test(blob)) score += 0.1;
   if (input.isUnread) score += 0.06;
 
   const from = (input.fromAddress ?? '').toLowerCase();
   if (from && !from.includes('notification') && !from.includes('alert@')) {
     score += 0.05;
   }
-  if (/\b(openai|devpost|github|stripe|linear|notion|figma|aws|google|apple)\b/i.test(blob)) {
+  if (
+    !informationalAlert &&
+    /\b(openai|devpost|github|stripe|linear|notion|figma|aws|google|apple)\b/i.test(blob)
+  ) {
     score += 0.1;
   }
 
@@ -160,6 +243,11 @@ export function scoreEmail(input: ScoredText & { isUnread?: boolean; receivedAt?
     const ageH = (Date.now() - input.receivedAt.getTime()) / 3_600_000;
     if (ageH < 24) score += 0.06;
     else if (ageH < 72) score += 0.03;
+  }
+
+  // Informational login/device alerts stay Brief-tier, not Focus-tier by score alone.
+  if (informationalAlert) {
+    score = Math.min(score, 0.55);
   }
 
   return clamp01(score);
@@ -174,14 +262,16 @@ export function scoreCalendarEvent(input: {
   const now = input.now ?? new Date();
   const hoursUntil =
     (input.startsAt.getTime() - now.getTime()) / 3_600_000;
-  let score = 0.5;
-  if (hoursUntil >= -1 && hoursUntil <= 4) score += 0.35;
-  else if (hoursUntil > 4 && hoursUntil <= 24) score += 0.25;
-  else if (hoursUntil > 24 && hoursUntil <= 72) score += 0.12;
+  // Base stays below Focus threshold — calendar lives on Schedule / light Brief.
+  let score = 0.38;
+  if (hoursUntil >= -1 && hoursUntil <= 4) score += 0.2;
+  else if (hoursUntil > 4 && hoursUntil <= 24) score += 0.14;
+  else if (hoursUntil > 24 && hoursUntil <= 72) score += 0.06;
   else if (hoursUntil < -1) score -= 0.2;
 
   const blob = `${input.title} ${input.description ?? ''}`;
-  if (HIGH_VALUE_PATTERNS.test(blob)) score += 0.1;
+  if (MEETING_LIKE.test(blob)) score += 0.06;
+  if (NON_MEETING_CALENDAR.test(blob)) score -= 0.08;
   if (/cancel|cancelled|out of office|ooo/i.test(blob)) score -= 0.3;
 
   return clamp01(score);
@@ -974,7 +1064,7 @@ export const BRIEF_SECTION_ORDER: BriefSection[] = [
   'Security',
   'Finance',
   'Career',
-  'Meetings',
+  'Calendar',
   'Projects',
   'Updates',
 ];

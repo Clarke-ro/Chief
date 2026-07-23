@@ -17,6 +17,7 @@ const SECTION_ORDER = [
   'Security',
   'Finance',
   'Career',
+  'Calendar',
   'Meetings',
   'Projects',
   'Updates',

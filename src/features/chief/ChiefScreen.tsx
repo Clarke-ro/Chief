@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -69,9 +69,15 @@ export function ChiefScreen() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [thinking, setThinking] = useState(false);
+  const threadScrollRef = useRef<ScrollView>(null);
 
   const closeHistory = useCallback(() => setHistoryOpen(false), []);
   const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
+  const scrollThreadToEnd = useCallback(() => {
+    requestAnimationFrame(() => {
+      threadScrollRef.current?.scrollToEnd({ animated: true });
+    });
+  }, []);
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -140,20 +146,24 @@ export function ChiefScreen() {
             return;
           }
 
+          // History for the model should not include the just-appended user turn.
+          const historyForModel = history.filter((turn) => turn.id !== userTurn.id);
+
           const live = await chiefChatRepository.sendStream(
             text,
-            { history, focusId },
+            { history: historyForModel, focusId },
             (delta) => {
               streamed += delta;
+              if (!streamed.trim()) return;
               if (!started) {
                 started = true;
                 setThinking(false);
               }
-              upsertChiefReply({
-                id: chiefId,
-                role: 'chief',
-                content: streamed,
-              });
+              upsertChiefReply(
+                { id: chiefId, role: 'chief', content: streamed },
+                { persist: false },
+              );
+              scrollThreadToEnd();
             },
           );
 
@@ -167,6 +177,7 @@ export function ChiefScreen() {
             role: 'chief',
             content: finalContent,
           });
+          scrollThreadToEnd();
         } catch (error) {
           const detail =
             error instanceof ApiError
@@ -184,12 +195,20 @@ export function ChiefScreen() {
               ? streamed
               : `${detail} I couldn't finish this reply with your live workspace context.`,
           });
+          scrollThreadToEnd();
         } finally {
           setThinking(false);
         }
       })();
     },
-    [appendChiefReply, appendUserTurn, params.focusId, thinking, upsertChiefReply],
+    [
+      appendChiefReply,
+      appendUserTurn,
+      params.focusId,
+      scrollThreadToEnd,
+      thinking,
+      upsertChiefReply,
+    ],
   );
 
   /** Actionable → user bubble + intro + editable canvas; related chips (not Open Gmail) */
@@ -303,11 +322,13 @@ export function ChiefScreen() {
           {hasConversation && activeSession ? (
             <>
               <ScrollView
+                ref={threadScrollRef}
                 style={styles.threadScroll}
                 contentContainerStyle={styles.threadContent}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                 onScrollBeginDrag={dismissKeyboard}
+                onContentSizeChange={scrollThreadToEnd}
                 showsVerticalScrollIndicator={false}
                 removeClippedSubviews={Platform.OS === 'android'}
               >

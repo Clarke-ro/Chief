@@ -102,14 +102,7 @@ export class PlannerService {
         source: 'deadline',
       });
     }
-    for (const c of calendarConflicts.slice(0, 1)) {
-      recommendedFocus.push({
-        id: c.aId,
-        title: `Resolve overlap: ${c.aTitle}`,
-        reason: `Conflicts with ${c.bTitle}`,
-        source: 'meeting',
-      });
-    }
+    // Calendar conflicts stay in notes / Schedule — not Top Priorities.
 
     const notes: string[] = [];
     if (overdueDeadlines.length > 0) {

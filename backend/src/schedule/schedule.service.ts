@@ -36,6 +36,11 @@ export type ScheduleItemDto = {
   lastSweepAt?: number;
 };
 
+type CalendarScheduleMeta = {
+  source: 'calendar';
+  eventId: string;
+};
+
 @Injectable()
 export class ScheduleService {
   constructor(
@@ -48,18 +53,12 @@ export class ScheduleService {
     const wsId = await this.resolveWorkspaceId(user, workspaceId);
     await this.membership.requireMembership(user.id, wsId);
 
-    let rows = await this.prisma.scheduleItem.findMany({
+    await this.syncTodayFromCalendar(wsId);
+
+    const rows = await this.prisma.scheduleItem.findMany({
       where: { workspaceId: wsId },
       orderBy: [{ startsAt: 'asc' }, { timeLabel: 'asc' }, { createdAt: 'asc' }],
     });
-
-    if (rows.length === 0) {
-      await this.seedFromCalendarIfEmpty(wsId);
-      rows = await this.prisma.scheduleItem.findMany({
-        where: { workspaceId: wsId },
-        orderBy: [{ startsAt: 'asc' }, { timeLabel: 'asc' }, { createdAt: 'asc' }],
-      });
-    }
 
     return rows.map(toDto);
   }
@@ -160,38 +159,97 @@ export class ScheduleService {
     return (await this.workspaces.ensureDefaultWorkspace(user)).id;
   }
 
-  /** First paint: materialize today's calendar events into the day plan once. */
-  private async seedFromCalendarIfEmpty(workspaceId: string): Promise<void> {
+  /**
+   * Keep Today's Schedule aligned with calendar events for the local day.
+   * Upserts by event id; leaves manually created schedule rows alone.
+   */
+  private async syncTodayFromCalendar(workspaceId: string): Promise<void> {
     const start = startOfLocalDay(new Date());
     const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
 
-    const events = await this.prisma.calendarEvent.findMany({
-      where: {
-        workspaceId,
-        startsAt: { gte: start, lt: end },
-      },
-      orderBy: { startsAt: 'asc' },
-      take: 20,
-    });
+    const [events, existing] = await Promise.all([
+      this.prisma.calendarEvent.findMany({
+        where: {
+          workspaceId,
+          startsAt: { gte: start, lt: end },
+          NOT: { status: 'cancelled' },
+        },
+        orderBy: { startsAt: 'asc' },
+        take: 40,
+      }),
+      this.prisma.scheduleItem.findMany({
+        where: {
+          workspaceId,
+          OR: [
+            { startsAt: { gte: start, lt: end } },
+            { startsAt: null, createdAt: { gte: start, lt: end } },
+          ],
+        },
+      }),
+    ]);
 
-    if (events.length === 0) return;
+    const byEventId = new Map<string, ScheduleItem>();
+    for (const row of existing) {
+      const eventId = calendarEventIdFromMeta(row.meta);
+      if (eventId) byEventId.set(eventId, row);
+    }
 
-    await this.prisma.scheduleItem.createMany({
-      data: events.map((event) => ({
-        workspaceId,
-        title: event.title.trim() || 'Meeting',
-        subtitle: event.location?.trim() || 'Google Calendar',
-        platform: 'calendar',
-        timeLabel: formatClockTime(event.startsAt),
-        startsAt: event.startsAt,
-        endsAt: event.endsAt,
-        status: ScheduleItemStatus.upcoming,
-        blockKind: ScheduleBlockKind.normal,
-        sweepPhase: SweepPhase.none,
-        meta: { source: 'calendar', eventId: event.id },
-      })),
-    });
+    const seen = new Set<string>();
+    for (const event of events) {
+      seen.add(event.id);
+      const title = event.title.trim() || 'Calendar event';
+      const subtitle = event.location?.trim() || 'Calendar';
+      const timeLabel = formatClockTime(event.startsAt);
+      const meta: CalendarScheduleMeta = {
+        source: 'calendar',
+        eventId: event.id,
+      };
+      const prev = byEventId.get(event.id);
+      if (prev) {
+        await this.prisma.scheduleItem.update({
+          where: { id: prev.id },
+          data: {
+            title,
+            subtitle,
+            timeLabel,
+            startsAt: event.startsAt,
+            endsAt: event.endsAt,
+            platform: 'calendar',
+            meta,
+          },
+        });
+      } else {
+        await this.prisma.scheduleItem.create({
+          data: {
+            workspaceId,
+            title,
+            subtitle,
+            platform: 'calendar',
+            timeLabel,
+            startsAt: event.startsAt,
+            endsAt: event.endsAt,
+            status: ScheduleItemStatus.upcoming,
+            blockKind: ScheduleBlockKind.normal,
+            sweepPhase: SweepPhase.none,
+            meta,
+          },
+        });
+      }
+    }
+
+    for (const [eventId, row] of byEventId) {
+      if (seen.has(eventId)) continue;
+      await this.prisma.scheduleItem.delete({ where: { id: row.id } });
+    }
   }
+}
+
+function calendarEventIdFromMeta(meta: unknown): string | null {
+  if (!meta || typeof meta !== 'object') return null;
+  const record = meta as { source?: unknown; eventId?: unknown };
+  if (record.source !== 'calendar') return null;
+  if (typeof record.eventId !== 'string' || !record.eventId.trim()) return null;
+  return record.eventId.trim();
 }
 
 function toDto(row: ScheduleItem): ScheduleItemDto {
