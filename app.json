@@ -30,7 +30,7 @@
       "favicon": "./assets/favicon.png",
       "name": "Chief",
       "shortName": "Chief",
-      "description": "Chief is your AI chief of staff for real work — connect Gmail, Calendar, Tasks, and Drive to prioritize your day, get a daily brief, and take the next action.",
+      "description": "Your AI chief of staff for real work — priorities, daily brief, and next actions.",
       "themeColor": "#6D19B7",
       "backgroundColor": "#F7F7F8"
     },
