@@ -7,11 +7,17 @@
       name="viewport"
       content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
     />
-    <title>%WEB_TITLE%</title>
+    <title>Chief — AI chief of staff for real work</title>
     <meta
       name="description"
-      content="Your AI chief of staff for real work — priorities, daily brief, and next actions."
+      content="Chief is your AI chief of staff. Connect Gmail, Google Calendar, Tasks, and Drive to prioritize your day, get a daily brief, and take the next action."
     />
+    <meta name="application-name" content="Chief" />
+    <!--
+      Google Search Console: replace CONTENT with your URL-prefix verification code,
+      then re-deploy. Same Google account must be Owner/Editor on the Cloud project.
+    -->
+    <!-- <meta name="google-site-verification" content="YOUR_VERIFICATION_CODE" /> -->
     <meta name="theme-color" content="#6D19B7" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#6D19B7" media="(prefers-color-scheme: dark)" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -78,7 +84,19 @@
 
   <body>
     <noscript>
-      You need to enable JavaScript to run Chief.
+      <main style="max-width:40rem;margin:2rem auto;padding:0 1.25rem;font-family:system-ui,sans-serif;line-height:1.5;color:#111">
+        <h1>Chief</h1>
+        <p>
+          Chief is your AI chief of staff for real work. It connects to tools like Gmail, Google
+          Calendar, Google Tasks, and Drive to prioritize your day, deliver a daily brief, and help
+          you take the next action.
+        </p>
+        <p>
+          <a href="/legal/privacy">Privacy Policy</a>
+          ·
+          <a href="/legal/terms">Terms of Service</a>
+        </p>
+      </main>
     </noscript>
     <div id="root"></div>
   </body>

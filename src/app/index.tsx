@@ -2,12 +2,13 @@ import { Redirect } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
+import { MarketingHomeScreen } from '@/features/marketing';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { ensureSessionBoot, usePreferencesStore, useSessionBootStore } from '@/stores';
 
 /**
- * App entry — wait for durable session restore, then route by auth + onboarding.
- * Home requires a live session; onboardingCompleted alone is not enough.
+ * App entry — public homepage for logged-out visitors (Google OAuth brand checks).
+ * Authenticated users route into the product.
  */
 export default function Index() {
   const colors = useThemeColors();
@@ -35,7 +36,8 @@ export default function Index() {
     return <Redirect href="/onboarding/connect" />;
   }
 
-  return <Redirect href="/onboarding" />;
+  // Public homepage — must name “Chief”, explain purpose, link Privacy/Terms.
+  return <MarketingHomeScreen />;
 }
 
 const styles = StyleSheet.create({
