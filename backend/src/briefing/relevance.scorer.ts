@@ -48,15 +48,16 @@ const HIGH_VALUE_PATTERNS =
 const ACTION_VERBS =
   /\b(submit|review|prepare|respond|reply|approve|confirm|schedule|send|finish|complete|fix|update|pay|sign)\b/i;
 
-/** Informational alerts — Brief-ok, rarely Focus. */
+/** Informational login/device alerts — never on Home Focus or Brief. */
 const NOISE_ALERT_PATTERNS =
-  /\b(new device|unrecognised device|unrecognized (device|login|sign[- ]?in)|login alert|sign[- ]?in (from|alert|detected)|we (noticed|detected) a (new|sign)|security alert|verify it('s| was) you|was this you)\b/i;
+  /\b(new device|unrecognised device|unrecognized (device|login|sign[- ]?in)|login alert|sign[- ]?in (from|alert|detected)|we (noticed|detected) a (new|sign)|security alert|verify it('s| was) you|was this you|suspicious sign[- ]?in|new sign[- ]?in|sign[- ]?in attempt)\b/i;
 
 const ACTIONABLE_SECURITY =
   /\b(unauthorized|account (locked|compromised|suspended)|reset your password|password reset required|suspicious (activity|attempt)|enable 2fa|mfa required|take action|secure your account)\b/i;
 
 const ACTIONABLE_PAYMENT =
   /\b(payment failed|failed (charge|payment)|declined|past due|overdue (invoice|payment)|update (your )?(payment|card|billing)|insufficient funds|action required.*(pay|payment|card))\b/i;
+
 
 const MEETING_LIKE =
   /\b(meeting|standup|stand-up|1:1|1\-1|sync|call|interview|demo|zoom|google meet|teams|huddle|retro|planning)\b/i;
@@ -195,14 +196,27 @@ export function isFocusEligible(input: {
   }
 }
 
-/** Hold security / payment / login alerts until related to Top Priorities. */
+/** Hold payment (and rare actionable account risks) until related to Top Priorities. */
 export function shouldDeferAlertSurfacing(
   workKind: WorkKind,
   title: string,
   snippet?: string | null,
   bodyText?: string | null,
 ): boolean {
-  if (workKind === 'security' || workKind === 'invoice') return true;
+  const blob = `${title} ${snippet ?? ''} ${bodyText ?? ''}`;
+  // Login/device noise is dropped earlier — never deferred into Home.
+  if (isNoiseLoginOrDeviceAlert(title, snippet, bodyText)) return false;
+  if (workKind === 'invoice' || ACTIONABLE_PAYMENT.test(blob)) return true;
+  if (workKind === 'security' && ACTIONABLE_SECURITY.test(blob)) return true;
+  return false;
+}
+
+/** Unrecognized device / login-style mail — never Focus, never Brief. */
+export function isNoiseLoginOrDeviceAlert(
+  title: string,
+  snippet?: string | null,
+  bodyText?: string | null,
+): boolean {
   const blob = `${title} ${snippet ?? ''} ${bodyText ?? ''}`;
   return NOISE_ALERT_PATTERNS.test(blob);
 }

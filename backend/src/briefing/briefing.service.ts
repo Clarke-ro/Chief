@@ -34,6 +34,7 @@ import {
   contextualOpenLabel,
   estimatedMinutesFor,
   isFocusEligible,
+  isNoiseLoginOrDeviceAlert,
   RELEVANCE_THRESHOLDS,
   scoreEmail,
   scoreTask,
@@ -53,8 +54,8 @@ const PLATFORMS = new Set([
   'trello',
 ]);
 
-/** Max Top Priorities returned in HomeBriefDto (UI collapses past the first 6). */
-const FOCUS_ITEM_LIMIT = 15;
+/** Max Top Priorities returned (Home shows 6, then View more). */
+const FOCUS_ITEM_LIMIT = 12;
 
 type RankedFocus = FocusItemDto & { relevance: number };
 
@@ -421,6 +422,18 @@ export class BriefingService {
     for (const email of emails) {
       const id = `mail-${email.id}`;
       if (dismissed.has(id)) continue;
+
+      // Never put unrecognized-device / login noise on Home — Schedule/Focus stay clean.
+      if (
+        isNoiseLoginOrDeviceAlert(
+          email.subject ?? '',
+          email.snippet,
+          email.bodyText,
+        )
+      ) {
+        continue;
+      }
+
       const relevance = scoreEmail({
         subject: email.subject,
         snippet: email.snippet,
@@ -438,16 +451,18 @@ export class BriefingService {
         bodyText: email.bodyText,
       });
 
-      // Security / payment / login alerts wait until related to Top Priorities.
-      if (
-        shouldDeferAlertSurfacing(
-          workKind,
-          email.subject ?? '',
-          email.snippet,
-          email.bodyText,
-        )
-      ) {
-        deferredAlerts.push({ email, workKind, relevance });
+      // Drop routine security/finance mail from Home unless held for priority relation.
+      if (workKind === 'security' || workKind === 'invoice') {
+        if (
+          shouldDeferAlertSurfacing(
+            workKind,
+            email.subject ?? '',
+            email.snippet,
+            email.bodyText,
+          )
+        ) {
+          deferredAlerts.push({ email, workKind, relevance });
+        }
         continue;
       }
 
@@ -521,6 +536,15 @@ export class BriefingService {
     }
 
     for (const alert of deferredAlerts) {
+      if (
+        isNoiseLoginOrDeviceAlert(
+          alert.email.subject ?? '',
+          alert.email.snippet,
+          alert.email.bodyText,
+        )
+      ) {
+        continue;
+      }
       const related = findRelatedPriority(
         {
           title: alert.email.subject ?? '',
@@ -533,13 +557,10 @@ export class BriefingService {
       if (!related) continue;
       if (dismissed.has(`related-${alert.email.id}`)) continue;
 
+      // Related payment/account risk → Focus only (not a Brief spam section).
       derivedFocus.push({
         ...this.relatedAlertToFocus(alert.email, alert.workKind, related.priority),
         relevance: Math.max(alert.relevance, 0.78),
-      });
-      briefingCandidates.push({
-        ...this.relatedAlertToSignal(alert.email, alert.workKind, related.priority),
-        relevance: Math.max(alert.relevance, 0.7),
       });
     }
 
@@ -820,35 +841,6 @@ export class BriefingService {
     };
   }
 
-  private relatedAlertToSignal(
-    email: {
-      id: string;
-      provider: IntegrationProvider;
-      subject: string | null;
-      snippet: string | null;
-      receivedAt: Date | null;
-    },
-    workKind: WorkKind,
-    priority: PriorityRef,
-  ): BriefingSignalDto {
-    const subject = email.subject?.trim() || 'Account alert';
-    const kindLabel = workKind === 'invoice' ? 'Payment' : 'Security';
-    return {
-      id: email.id,
-      platform: mapPlatform('gmail', email.provider, 'gmail'),
-      section: briefSectionFor(workKind),
-      title: `${kindLabel} related to “${priority.title}”`,
-      summary: subject,
-      timestamp: email.receivedAt
-        ? email.receivedAt.toLocaleTimeString('en-US', {
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true,
-          })
-        : 'Today',
-    };
-  }
-
   private taskToFocus(
     task: {
       id: string;
@@ -1091,6 +1083,29 @@ function needsPresentationRefresh(brief: HomeBriefDto): boolean {
     return true;
   }
   if (brief.briefing.some((signal) => signal.section === 'Meetings')) {
+    return true;
+  }
+  // Drop cached login/device noise that should never have been on Home.
+  if (
+    brief.focus.some((item) =>
+      isNoiseLoginOrDeviceAlert(item.title, item.reason, item.aboutBody),
+    ) ||
+    brief.briefing.some((signal) =>
+      isNoiseLoginOrDeviceAlert(signal.title, signal.summary, null),
+    )
+  ) {
+    return true;
+  }
+  if (
+    brief.focus.some(
+      (item) =>
+        item.urgencyLabel === 'Security' ||
+        (item.urgencyLabel === 'Related risk' &&
+          /device|login|sign[- ]?in|unrecognized|unrecognised/i.test(
+            `${item.title} ${item.reason}`,
+          )),
+    )
+  ) {
     return true;
   }
   // Old Focus actions were label-only, so the client guessed a generic destination.

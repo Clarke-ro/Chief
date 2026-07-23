@@ -106,6 +106,28 @@ describe('briefing.conflicts', () => {
     expect(match).toBeNull();
   });
 
+  it('does not treat google domain as a priority link', () => {
+    const match = findRelatedPriority(
+      {
+        title: 'Security alert',
+        snippet: 'New device signed in to your Google Account',
+        fromAddress: 'no-reply@accounts.google.com',
+      },
+      [
+        {
+          id: 'p1',
+          title: 'Review Google Docs draft',
+          reason: 'Shared with team',
+          priority: 'medium',
+          urgencyLabel: 'Follow up',
+          relevance: 0.6,
+          platform: 'gmail',
+        },
+      ],
+    );
+    expect(match).toBeNull();
+  });
+
   it('filters stop words from tokens', () => {
     const tokens = significantTokens('The payment for Acme Billing failed');
     expect(tokens.has('the')).toBe(false);

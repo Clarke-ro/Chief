@@ -164,7 +164,23 @@ export function findRelatedPriority(
     .toLowerCase()
     .split('@')[1]
     ?.split('.')[0];
-  if (fromDomain && fromDomain.length >= 4) {
+  // Ignore mega-provider domains — "google" must not link a login alert to work.
+  const ignoreDomains = new Set([
+    'google',
+    'gmail',
+    'apple',
+    'icloud',
+    'microsoft',
+    'outlook',
+    'live',
+    'yahoo',
+    'github',
+    'amazon',
+    'facebook',
+    'meta',
+    'accounts',
+  ]);
+  if (fromDomain && fromDomain.length >= 4 && !ignoreDomains.has(fromDomain)) {
     alertTokens.add(fromDomain);
   }
   // Drop generic alert vocabulary so "payment" alone never matches.
@@ -188,6 +204,16 @@ export function findRelatedPriority(
     'charge',
     'noreply',
     'support',
+    'google',
+    'apple',
+    'microsoft',
+    'gmail',
+    'icloud',
+    'outlook',
+    'signed',
+    'chrome',
+    'safari',
+    'firefox',
   ]) {
     alertTokens.delete(generic);
   }
