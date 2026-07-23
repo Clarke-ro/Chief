@@ -12,12 +12,16 @@ import type {
   ProviderHealthResult,
 } from './provider.types';
 
-/** User-token scopes for reading workspace activity. */
+/** User-token scopes for reading workspace activity (history required for conversations.history). */
 const USER_SCOPES = [
   'channels:read',
+  'channels:history',
   'groups:read',
+  'groups:history',
   'im:read',
+  'im:history',
   'mpim:read',
+  'mpim:history',
   'users:read',
   'users:read.email',
   'search:read',

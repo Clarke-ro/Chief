@@ -52,7 +52,7 @@ export const DEFAULT_SYNC_POLICIES: SyncPolicyDefinition[] = [
   {
     provider: IntegrationProvider.slack,
     resource: SyncResource.messages,
-    initialLookbackDays: 5,
+    initialLookbackDays: 7,
     scheduledIntervalMinutes: SCHEDULED_INTERVAL_MINUTES,
     incrementalLookbackMinutes: INCREMENTAL_LOOKBACK_MINUTES,
     allowAutomaticHistorical: false,
@@ -60,7 +60,7 @@ export const DEFAULT_SYNC_POLICIES: SyncPolicyDefinition[] = [
   {
     provider: IntegrationProvider.github,
     resource: SyncResource.tasks,
-    initialLookbackDays: 5,
+    initialLookbackDays: 14,
     scheduledIntervalMinutes: SCHEDULED_INTERVAL_MINUTES,
     incrementalLookbackMinutes: INCREMENTAL_LOOKBACK_MINUTES,
     allowAutomaticHistorical: false,

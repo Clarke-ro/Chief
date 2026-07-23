@@ -489,6 +489,23 @@ export class BriefingService {
       }
     }
 
+    // Slack messages → Today's Brief (knowledge snapshot already scoped to recent window).
+    for (const msg of knowledge.slack) {
+      const id = `slack-${msg.id}`;
+      if (dismissed.has(id)) continue;
+      const summary = msg.summary?.trim();
+      if (!summary) continue;
+      briefingCandidates.push({
+        id,
+        platform: 'slack',
+        section: 'Needs Attention',
+        title: msg.title || 'Slack',
+        summary: summary.length > 160 ? `${summary.slice(0, 157)}…` : summary,
+        timestamp: 'Recently',
+        relevance: 0.62,
+      });
+    }
+
     // Calendar stays on Schedule. Focus only gets derived conflict cards later.
 
     rankedFocus.sort((a, b) => b.relevance - a.relevance);

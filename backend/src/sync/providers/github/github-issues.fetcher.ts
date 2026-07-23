@@ -9,8 +9,10 @@ type GitHubSearchResponse = {
   incomplete_results?: boolean;
 };
 
+type GitHubIssue = Record<string, unknown>;
+
 /**
- * Pulls open issues + PRs assigned to (or authored by) the authenticated user.
+ * Pulls open issues + PRs involving the authenticated user (assigned, created, mentioned).
  */
 @Injectable()
 export class GitHubIssuesFetcher implements SyncResourceFetcher {
@@ -20,7 +22,7 @@ export class GitHubIssuesFetcher implements SyncResourceFetcher {
 
   async fetch(ctx: FetchContext): Promise<RawSyncBatch> {
     try {
-      return await this.fetchAssigned(ctx);
+      return await this.fetchInvolved(ctx);
     } catch (error) {
       if (error instanceof ProviderApiError && (error.status === 401 || error.status === 403)) {
         this.logger.warn(
@@ -45,25 +47,76 @@ export class GitHubIssuesFetcher implements SyncResourceFetcher {
     }
   }
 
-  private async fetchAssigned(ctx: FetchContext): Promise<RawSyncBatch> {
-    const since = ctx.window.from.toISOString().slice(0, 10);
-    const queries = [
-      `is:open assignee:@me updated:>=${since}`,
-      `is:open author:@me updated:>=${since}`,
-    ];
+  private async fetchInvolved(ctx: FetchContext): Promise<RawSyncBatch> {
     const seen = new Set<string>();
     const items: RawSyncBatch['items'] = [];
 
-    for (const q of queries) {
+    const pushIssue = (issue: GitHubIssue) => {
+      const id =
+        typeof issue.id === 'number'
+          ? String(issue.id)
+          : typeof issue.id === 'string'
+            ? issue.id
+            : null;
+      if (!id || seen.has(id)) return;
+      // Skip pure PRs? No — include both issues and PRs (pull_request key present on PRs).
+      seen.add(id);
+      items.push({
+        providerItemId: id,
+        occurredAt:
+          typeof issue.updated_at === 'string'
+            ? issue.updated_at
+            : typeof issue.created_at === 'string'
+              ? issue.created_at
+              : undefined,
+        payload: issue,
+      });
+    };
+
+    // Reliable path: issues assigned / created / mentioned for the authed user.
+    for (const filter of ['assigned', 'created', 'mentioned'] as const) {
       let page = 1;
-      while (page <= 3) {
+      while (page <= 2) {
         const params = new URLSearchParams({
-          q,
+          filter,
+          state: 'open',
           sort: 'updated',
-          order: 'desc',
+          direction: 'desc',
           per_page: '50',
           page: String(page),
         });
+        const batch = await providerFetchJson<GitHubIssue[]>(
+          `https://api.github.com/issues?${params}`,
+          {
+            accessToken: ctx.accessToken,
+            headers: {
+              Accept: 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+            },
+          },
+        );
+        for (const issue of batch) pushIssue(issue);
+        if (batch.length < 50) break;
+        page += 1;
+      }
+    }
+
+    // Supplement with search for review requests + recent involvement (date-bounded).
+    const since = ctx.window.from.toISOString().slice(0, 10);
+    const queries = [
+      `is:open review-requested:@me updated:>=${since}`,
+      `is:open involves:@me updated:>=${since}`,
+    ];
+
+    for (const q of queries) {
+      const params = new URLSearchParams({
+        q,
+        sort: 'updated',
+        order: 'desc',
+        per_page: '50',
+        page: '1',
+      });
+      try {
         const data = await providerFetchJson<GitHubSearchResponse>(
           `https://api.github.com/search/issues?${params}`,
           {
@@ -74,31 +127,16 @@ export class GitHubIssuesFetcher implements SyncResourceFetcher {
             },
           },
         );
-
-        const batch = data.items ?? [];
-        for (const issue of batch) {
-          const id =
-            typeof issue.id === 'number'
-              ? String(issue.id)
-              : typeof issue.id === 'string'
-                ? issue.id
-                : null;
-          if (!id || seen.has(id)) continue;
-          seen.add(id);
-          items.push({
-            providerItemId: id,
-            occurredAt:
-              typeof issue.updated_at === 'string'
-                ? issue.updated_at
-                : typeof issue.created_at === 'string'
-                  ? issue.created_at
-                  : undefined,
-            payload: issue,
-          });
-        }
-
-        if (batch.length < 50) break;
-        page += 1;
+        for (const issue of data.items ?? []) pushIssue(issue);
+      } catch (error) {
+        this.logger.debug(
+          {
+            connectedAccountId: ctx.connectedAccountId,
+            query: q,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'GitHub search supplement skipped',
+        );
       }
     }
 

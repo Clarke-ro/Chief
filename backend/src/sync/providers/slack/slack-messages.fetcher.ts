@@ -26,9 +26,24 @@ type SlackHistory = {
   response_metadata?: { next_cursor?: string };
 };
 
+type SlackSearchMessages = {
+  ok: boolean;
+  error?: string;
+  messages?: {
+    matches?: Array<{
+      ts?: string;
+      text?: string;
+      user?: string;
+      username?: string;
+      permalink?: string;
+      channel?: { id?: string; name?: string };
+    }>;
+  };
+};
+
 /**
- * Pulls recent messages from channels the user is in (conversations.history).
- * Caps channels + pages so onboarding sync stays bounded.
+ * Pulls recent Slack messages for channels the user is in.
+ * Prefers conversations.history; falls back to search.messages when history scopes are missing.
  */
 @Injectable()
 export class SlackMessagesFetcher implements SyncResourceFetcher {
@@ -63,10 +78,79 @@ export class SlackMessagesFetcher implements SyncResourceFetcher {
   }
 
   private async fetchRecent(ctx: FetchContext): Promise<RawSyncBatch> {
+    const viaHistory = await this.fetchViaHistory(ctx);
+    if (viaHistory.items.length > 0) {
+      return viaHistory.batch;
+    }
+
+    // Existing installs often lack *:history — search:read still returns recent messages.
+    const viaSearch = await this.fetchViaSearch(ctx);
+    if (viaSearch.items.length > 0 || viaHistory.needsReconnect) {
+      this.logger.log(
+        {
+          connectedAccountId: ctx.connectedAccountId,
+          historyCount: viaHistory.items.length,
+          searchCount: viaSearch.items.length,
+          needsReconnect: viaHistory.needsReconnect,
+          mode: ctx.window.mode,
+        },
+        'Slack messages fetch (search fallback)',
+      );
+      return emptyBatch(ctx, {
+        items: viaSearch.items,
+        cursorAfter: `slack:${ctx.window.mode}:${new Date().toISOString()}`,
+        meta: {
+          checkpointKind:
+            ctx.window.mode === 'incremental'
+              ? 'slack.incremental'
+              : 'slack.initial',
+          itemCount: viaSearch.items.length,
+          mode: ctx.window.mode,
+          source: 'search.messages',
+          needsReconnect: viaHistory.needsReconnect && viaSearch.items.length === 0,
+        },
+      });
+    }
+
+    this.logger.log(
+      {
+        connectedAccountId: ctx.connectedAccountId,
+        channelCount: viaHistory.channelCount,
+        itemCount: 0,
+        mode: ctx.window.mode,
+        needsReconnect: viaHistory.needsReconnect,
+      },
+      'Slack messages fetch',
+    );
+
+    return emptyBatch(ctx, {
+      items: [],
+      cursorAfter: `slack:${ctx.window.mode}:${new Date().toISOString()}`,
+      meta: {
+        checkpointKind:
+          ctx.window.mode === 'incremental'
+            ? 'slack.incremental'
+            : 'slack.initial',
+        itemCount: 0,
+        channelCount: viaHistory.channelCount,
+        mode: ctx.window.mode,
+        needsReconnect: viaHistory.needsReconnect,
+      },
+    });
+  }
+
+  private async fetchViaHistory(ctx: FetchContext): Promise<{
+    items: RawSyncBatch['items'];
+    batch: RawSyncBatch;
+    channelCount: number;
+    needsReconnect: boolean;
+  }> {
     const channels = await this.listChannels(ctx.accessToken);
     const items: RawSyncBatch['items'] = [];
     const oldest = String(Math.floor(ctx.window.from.getTime() / 1000));
     const latest = String(Math.floor(ctx.window.to.getTime() / 1000));
+    let missingScopeHits = 0;
+    let historyAttempts = 0;
 
     for (const channel of channels.slice(0, 12)) {
       let cursor: string | undefined;
@@ -81,22 +165,30 @@ export class SlackMessagesFetcher implements SyncResourceFetcher {
         });
         if (cursor) params.set('cursor', cursor);
 
+        historyAttempts += 1;
         const data = await this.slackGet<SlackHistory>(
           ctx.accessToken,
           `https://slack.com/api/conversations.history?${params}`,
         );
         if (!data.ok) {
-          this.logger.debug(
-            { channelId: channel.id, error: data.error },
-            'Slack history skipped',
-          );
+          if (data.error === 'missing_scope' || data.error === 'not_in_channel') {
+            if (data.error === 'missing_scope') missingScopeHits += 1;
+            this.logger.warn(
+              { channelId: channel.id, error: data.error },
+              'Slack history skipped',
+            );
+          } else {
+            this.logger.debug(
+              { channelId: channel.id, error: data.error },
+              'Slack history skipped',
+            );
+          }
           break;
         }
 
         for (const message of data.messages ?? []) {
           const ts = typeof message.ts === 'string' ? message.ts : null;
           if (!ts) continue;
-          // Skip channel join / subtype noise without user text.
           if (typeof message.subtype === 'string' && message.subtype !== 'bot_message') {
             continue;
           }
@@ -116,17 +208,10 @@ export class SlackMessagesFetcher implements SyncResourceFetcher {
       } while (cursor && pages < 2);
     }
 
-    this.logger.log(
-      {
-        connectedAccountId: ctx.connectedAccountId,
-        channelCount: channels.length,
-        itemCount: items.length,
-        mode: ctx.window.mode,
-      },
-      'Slack messages fetch',
-    );
+    const needsReconnect =
+      historyAttempts > 0 && missingScopeHits > 0 && missingScopeHits >= Math.min(historyAttempts, 3);
 
-    return emptyBatch(ctx, {
+    const batch = emptyBatch(ctx, {
       items,
       cursorAfter: `slack:${ctx.window.mode}:${new Date().toISOString()}`,
       meta: {
@@ -137,8 +222,85 @@ export class SlackMessagesFetcher implements SyncResourceFetcher {
         itemCount: items.length,
         channelCount: Math.min(channels.length, 12),
         mode: ctx.window.mode,
+        source: 'conversations.history',
+        needsReconnect: needsReconnect && items.length === 0,
       },
     });
+
+    if (items.length > 0) {
+      this.logger.log(
+        {
+          connectedAccountId: ctx.connectedAccountId,
+          channelCount: channels.length,
+          itemCount: items.length,
+          mode: ctx.window.mode,
+        },
+        'Slack messages fetch',
+      );
+    }
+
+    return {
+      items,
+      batch,
+      channelCount: channels.length,
+      needsReconnect,
+    };
+  }
+
+  private async fetchViaSearch(ctx: FetchContext): Promise<{
+    items: RawSyncBatch['items'];
+  }> {
+    const after = ctx.window.from.toISOString().slice(0, 10);
+    const params = new URLSearchParams({
+      query: `after:${after}`,
+      sort: 'timestamp',
+      sort_dir: 'desc',
+      count: '50',
+    });
+
+    const data = await this.slackGet<SlackSearchMessages>(
+      ctx.accessToken,
+      `https://slack.com/api/search.messages?${params}`,
+    );
+
+    if (!data.ok) {
+      this.logger.warn(
+        { error: data.error, connectedAccountId: ctx.connectedAccountId },
+        'Slack search.messages failed',
+      );
+      return { items: [] };
+    }
+
+    const items: RawSyncBatch['items'] = [];
+    for (const match of data.messages?.matches ?? []) {
+      const ts = typeof match.ts === 'string' ? match.ts : null;
+      const channelId =
+        match.channel && typeof match.channel.id === 'string'
+          ? match.channel.id
+          : null;
+      if (!ts || !channelId) continue;
+      const text = typeof match.text === 'string' ? match.text.trim() : '';
+      if (!text) continue;
+
+      items.push({
+        providerItemId: `${channelId}:${ts}`,
+        occurredAt: new Date(Number(ts.split('.')[0]) * 1000).toISOString(),
+        payload: {
+          ts,
+          text,
+          user: match.user,
+          username: match.username,
+          permalink: match.permalink,
+          channel: {
+            id: channelId,
+            name: match.channel?.name,
+          },
+          channel_id: channelId,
+        },
+      });
+    }
+
+    return { items };
   }
 
   private async listChannels(
@@ -171,7 +333,6 @@ export class SlackMessagesFetcher implements SyncResourceFetcher {
 
       for (const ch of data.channels ?? []) {
         if (!ch.id) continue;
-        // Prefer channels the user is in; IMs always include them.
         if (ch.is_im || ch.is_mpim || ch.is_member !== false) {
           channels.push({
             id: ch.id,
@@ -191,7 +352,6 @@ export class SlackMessagesFetcher implements SyncResourceFetcher {
     accessToken: string,
     url: string,
   ): Promise<T> {
-    // Slack expects the user token as Bearer; some older tokens are bare.
     return providerFetchJson<T>(url, {
       accessToken,
       authScheme: 'Bearer',
