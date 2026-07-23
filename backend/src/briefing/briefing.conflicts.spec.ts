@@ -49,7 +49,7 @@ describe('briefing.conflicts', () => {
         {
           id: 'work',
           title: 'Submit Q3 deck',
-          reason: 'Deadline today — Est. 90 min',
+          reason: 'Deadline today',
           priority: 'high',
           urgencyLabel: 'Deadline',
           relevance: 0.85,

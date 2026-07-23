@@ -29,16 +29,17 @@ export function AppChip({
   const colors = useThemeColors();
   const compact = size === 'sm';
 
+  // Primary (accent) = solid brand fill; secondary (neutral) = outlined/ghost pill.
   const tones: Record<AppChipTone, { bg: string; fg: string; border: string }> = {
     neutral: {
-      bg: colors.bgSubtle,
+      bg: 'transparent',
       fg: colors.textSecondary,
-      border: colors.borderSubtle,
+      border: colors.border,
     },
     accent: {
-      bg: colors.accentMuted,
-      fg: colors.accent,
-      border: colors.accentMuted,
+      bg: colors.accent,
+      fg: '#FFFFFF',
+      border: colors.accent,
     },
     success: {
       bg: `${colors.success}18`,
@@ -59,7 +60,7 @@ export function AppChip({
 
   const t = tones[tone];
   const bg = selected ? colors.accent : t.bg;
-  const fg = selected ? colors.bgElevated : t.fg;
+  const fg = selected ? '#FFFFFF' : t.fg;
   const border = selected ? colors.accent : t.border;
 
   const content = (

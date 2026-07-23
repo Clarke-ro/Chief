@@ -3,15 +3,11 @@ import { Redirect, Tabs } from 'expo-router';
 import { CalendarDays, ChartNoAxesCombined, Home, User } from 'lucide-react-native';
 import { memo, useEffect } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, View, type ColorValue } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChiefLogo } from '@/features/chief/components/ChiefLogo';
 import { useResolvedColorScheme } from '@/hooks/useResolvedColorScheme';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { ensureSessionBoot, useSessionBootStore } from '@/stores';
-
-/** Default tab bar content height (icons + labels) before safe-area padding. */
-const TAB_BAR_CONTENT_HEIGHT = 49;
 
 type TabIconProps = { color: ColorValue; size: number };
 
@@ -34,7 +30,6 @@ const ProfileIcon = memo(function ProfileIcon({ color, size }: TabIconProps) {
 export default function TabsLayout() {
   const scheme = useResolvedColorScheme();
   const colors = useThemeColors();
-  const insets = useSafeAreaInsets();
   const ready = useSessionBootStore((s) => s.ready);
   const hasSession = useSessionBootStore((s) => s.hasSession);
 
@@ -54,9 +49,6 @@ export default function TabsLayout() {
     return <Redirect href="/onboarding" />;
   }
 
-  // Keep tab icons/labels above the system gesture / 3-button nav bar (edge-to-edge).
-  const bottomInset = insets.bottom;
-
   return (
     <Tabs
       // Keep inactive scenes mounted to avoid blank-tab races; freeze off (5-tab freeze bugs).
@@ -71,14 +63,14 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textTertiary,
         tabBarLabelStyle: styles.label,
+        // Do not set height or paddingBottom here — React Navigation sizes the bar as
+        // (49 + safe-area) and applies bottom inset padding. Overriding height while the
+        // navigator still pads for the home indicator clips/covers the label row.
         tabBarStyle: [
           styles.tabBar,
           {
             backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.bgElevated,
             borderTopColor: colors.border,
-            // Explicit height + padding so edge-to-edge system nav doesn't cover tab buttons.
-            height: TAB_BAR_CONTENT_HEIGHT + bottomInset,
-            paddingBottom: bottomInset,
           },
         ],
         tabBarBackground: () =>
@@ -86,7 +78,7 @@ export default function TabsLayout() {
             <BlurView
               intensity={64}
               tint={scheme === 'dark' ? 'systemChromeMaterialDark' : 'systemChromeMaterial'}
-              style={StyleSheet.absoluteFill}
+              style={[StyleSheet.absoluteFill, styles.tabBarBackground]}
             />
           ) : null,
       }}
@@ -140,12 +132,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   label: {
-    fontSize: 12,
+    fontSize: 11,
+    lineHeight: 13,
     fontWeight: '500',
   },
   tabBar: {
     position: Platform.OS === 'ios' ? 'absolute' : 'relative',
     borderTopWidth: StyleSheet.hairlineWidth,
-    elevation: 0,
+    // Keep the bar above scene backgrounds / absolute fillers (iOS absolute bar + web stacking).
+    zIndex: 100,
+    elevation: 8,
+    overflow: 'visible',
+  },
+  tabBarBackground: {
+    zIndex: 0,
   },
 });

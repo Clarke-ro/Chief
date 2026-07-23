@@ -913,7 +913,8 @@ export function buildActionReason(input: {
   fromName?: string | null;
   dueAt?: Date | null;
   startsAt?: Date | null;
-  estimatedTime: string;
+  /** Kept for call-site compatibility; time is shown on the Focus card badge instead. */
+  estimatedTime?: string;
   now?: Date;
 }): string {
   const narrative = synthesizeFocusNarrative({
@@ -932,10 +933,8 @@ export function buildActionReason(input: {
     now: input.now,
   });
 
-  return truncate(
-    collapseWhitespace([narrative.reasonHint, `Est. ${input.estimatedTime}`].filter(Boolean).join(' · ')),
-    88,
-  );
+  // Time lives in FocusItem.estimatedTime (card badge) — don't repeat "Est." here.
+  return truncate(collapseWhitespace(narrative.reasonHint), 88);
 }
 
 /** Primary open/handoff label — next logical step, not generic “Open”. */

@@ -11,20 +11,29 @@ type FocusRowProps = {
   onActionPress?: (action: FocusAction) => void;
 };
 
+/** Drop "Est. N min" from the reason — time already shows in the card badge. */
+function reasonWithoutEstimate(reason: string): string {
+  return reason
+    .replace(/(?:\s*[·•|—–\-]\s*)?Est\.\s*\d+\s*min\b/gi, '')
+    .replace(/\s*[·•|—–\-]\s*$/g, '')
+    .trim();
+}
+
 /** Focus reason (single-line ellipsis) + context-specific action chips. */
 export function FocusRow({ item, onPress, onActionPress }: FocusRowProps) {
   const colors = useThemeColors();
+  const reason = reasonWithoutEstimate(item.reason);
 
   return (
     <View style={styles.wrap}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${item.title}. ${item.reason}. ${item.priority} priority`}
+        accessibilityLabel={`${item.title}. ${reason}. ${item.priority} priority`}
         onPress={onPress}
         style={({ pressed }) => [pressed && styles.pressed]}
       >
         <Text style={[styles.summary, { color: colors.text }]} numberOfLines={1}>
-          {item.reason}
+          {reason}
         </Text>
       </Pressable>
       <FocusActions actions={item.actions} onActionPress={onActionPress} />

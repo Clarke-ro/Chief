@@ -168,18 +168,15 @@ export function FocusDetailScreen({
         ]}
       >
         <View style={styles.actionRow}>
-          {item.actions.map((action, index) => {
-            const isAccent = action.tone === 'accent' || index === item.actions.length - 1;
-            return (
-              <AppChip
-                key={action.id}
-                label={action.label}
-                tone={isAccent ? 'accent' : action.tone ?? 'neutral'}
-                size="sm"
-                onPress={() => onActionPress?.(action)}
-              />
-            );
-          })}
+          {item.actions.map((action) => (
+            <AppChip
+              key={action.id}
+              label={action.label}
+              tone={action.tone ?? 'neutral'}
+              size="sm"
+              onPress={() => onActionPress?.(action)}
+            />
+          ))}
         </View>
       </View>
     </View>

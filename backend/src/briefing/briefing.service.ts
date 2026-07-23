@@ -766,7 +766,7 @@ export class BriefingService {
       id,
       platform: 'calendar',
       title: shortFocusTitle(`Reschedule ${blockTitle} — protect “${workTitle}”`),
-      reason: truncateJoin([`Conflicts with ${workTitle}`, 'Est. 10 min'], 88),
+      reason: truncateJoin([`Conflicts with ${workTitle}`], 88),
       estimatedTime: '10 min',
       priority: 'high',
       confidence: 0.9,
@@ -825,7 +825,7 @@ export class BriefingService {
       id,
       platform: mapPlatform('gmail', email.provider, 'gmail'),
       title: shortFocusTitle(`${kindLabel} risk for “${priority.title}”`),
-      reason: truncateJoin([subject, 'Est. 10 min'], 88),
+      reason: truncateJoin([subject], 88),
       estimatedTime: '10 min',
       priority: 'high',
       confidence: 0.86,
@@ -874,7 +874,7 @@ export class BriefingService {
       id: task.id,
       platform,
       title: shortFocusTitle(narrative.headline),
-      reason: truncateJoin([narrative.reasonHint, `Est. ${estimatedTime}`], 88),
+      reason: truncateJoin([narrative.reasonHint], 88),
       estimatedTime,
       priority: priorityFromScore(relevance, task.priority),
       confidence: clamp01(Math.max(task.confidence ?? 0.7, relevance)),
@@ -926,7 +926,7 @@ export class BriefingService {
       id: `mail-${email.id}`,
       platform: mapPlatform('gmail', email.provider, 'gmail'),
       title: shortFocusTitle(narrative.headline),
-      reason: truncateJoin([narrative.reasonHint, `Est. ${estimatedTime}`], 88),
+      reason: truncateJoin([narrative.reasonHint], 88),
       estimatedTime,
       priority: priorityFromScore(relevance),
       confidence: clamp01(relevance),
@@ -967,7 +967,7 @@ export class BriefingService {
       id: `event-${event.id}`,
       platform: mapPlatform('calendar', event.provider, 'calendar'),
       title: shortFocusTitle(narrative.headline),
-      reason: truncateJoin([narrative.reasonHint, `Est. ${estimatedTime}`], 88),
+      reason: truncateJoin([narrative.reasonHint], 88),
       estimatedTime,
       priority: priorityFromScore(relevance),
       confidence: clamp01(relevance),
@@ -1208,7 +1208,11 @@ function buildEmailFocusActions(
   gmailUrl: string | null,
 ): FocusActionDto[] {
   const actions: FocusActionDto[] = [
-    { id: `${emailId}-done`, label: 'Mark done', tone: 'accent' },
+    {
+      id: `${emailId}-done`,
+      label: workKind === 'invoice' ? 'Pay' : 'Mark done',
+      tone: 'accent',
+    },
     { id: `${emailId}-ask`, label: 'Ask Chief', execution: 'ask_chief' },
   ];
 
