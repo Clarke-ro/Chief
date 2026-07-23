@@ -415,7 +415,12 @@ export function HomeScreen() {
                       ]}
                     >
                       <Text
-                        style={[styles.focusNumber, { color: colors.priority[item.priority] }]}
+                        style={[
+                          styles.focusNumber,
+                          index + 1 >= 10 && styles.focusNumberDouble,
+                          { color: colors.priority[item.priority] },
+                        ]}
+                        numberOfLines={1}
                         accessibilityLabel={`Priority ${index + 1}`}
                       >
                         {index + 1}
@@ -631,7 +636,7 @@ const styles = StyleSheet.create({
     gap: spacing[8],
   },
   focusNumber: {
-    width: 26,
+    width: 28,
     textAlign: 'center',
     fontSize: 24,
     lineHeight: 28,
@@ -639,6 +644,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
     letterSpacing: -0.5,
+  },
+  focusNumberDouble: {
+    width: 32,
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: -0.8,
   },
   focusCard: {
     flex: 1,
