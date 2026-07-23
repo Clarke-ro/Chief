@@ -50,22 +50,49 @@ export function WelcomeScreen() {
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel="Get started"
+            accessibilityState={{ disabled: !agreed }}
             activeOpacity={0.85}
             onPress={goAuth}
-            style={[styles.primary, { backgroundColor: colors.accent }]}
+            style={[
+              styles.primary,
+              {
+                backgroundColor: agreed ? colors.accent : colors.bgSubtle,
+                borderColor: agreed ? colors.accent : colors.border,
+                borderWidth: StyleSheet.hairlineWidth,
+              },
+            ]}
           >
-            <Text style={styles.primaryLabel}>Get started</Text>
-            <View style={styles.primaryIcon}>
-              <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.25} />
+            <Text
+              style={[
+                styles.primaryLabel,
+                { color: agreed ? '#FFFFFF' : colors.textTertiary },
+              ]}
+            >
+              Get started
+            </Text>
+            <View
+              style={[
+                styles.primaryIcon,
+                {
+                  backgroundColor: agreed ? 'rgba(255,255,255,0.18)' : colors.bgElevated,
+                },
+              ]}
+            >
+              <ArrowRight
+                size={18}
+                color={agreed ? '#FFFFFF' : colors.textTertiary}
+                strokeWidth={2.25}
+              />
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel="I already have an account"
+            accessibilityState={{ disabled: !agreed }}
             activeOpacity={0.55}
             onPress={goAuth}
-            style={styles.secondary}
+            style={[styles.secondary, { opacity: agreed ? 1 : 0.45 }]}
           >
             <Text style={[styles.secondaryLabel, { color: colors.textSecondary }]}>
               I already have an account
@@ -155,7 +182,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
   },
   primaryLabel: {
-    color: '#FFFFFF',
     fontSize: 18,
     lineHeight: 24,
     fontWeight: '600',
@@ -169,7 +195,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
   },
   secondary: {
     alignItems: 'center',
@@ -186,9 +211,13 @@ const styles = StyleSheet.create({
   agreeRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    maxWidth: 340,
     gap: spacing[10],
     paddingTop: spacing[12],
     paddingBottom: spacing[4],
+    paddingHorizontal: spacing[8],
   },
   checkbox: {
     width: 20,
@@ -200,10 +229,11 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   agreeText: {
-    flex: 1,
+    flexShrink: 1,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '500',
+    textAlign: 'left',
   },
   agreeLink: {
     fontWeight: '600',
