@@ -633,11 +633,11 @@ const styles = StyleSheet.create({
   focusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[8],
+    gap: spacing[4],
   },
   focusNumber: {
-    width: 28,
-    textAlign: 'center',
+    width: 18,
+    textAlign: 'left',
     fontSize: 24,
     lineHeight: 28,
     fontFamily: fontFamily.bold,
@@ -646,7 +646,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
   },
   focusNumberDouble: {
-    width: 32,
+    width: 22,
     fontSize: 17,
     lineHeight: 22,
     letterSpacing: -0.8,
@@ -661,7 +661,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing[8],
-    paddingHorizontal: spacing[12],
+    paddingHorizontal: spacing[8],
     paddingBottom: spacing[4],
   },
   focusCopy: {
@@ -714,7 +714,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   focusThread: {
-    paddingHorizontal: spacing[12],
+    paddingHorizontal: spacing[8],
   },
   briefingGroups: {
     paddingBottom: spacing[16],
