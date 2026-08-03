@@ -71,9 +71,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
     };
 
     if (status >= 500) {
+      const errMessage =
+        exception instanceof Error ? exception.message : String(exception);
+      // Never log Redis command args (may include OAuth PKCE secrets).
       this.logger.error(
         {
-          err: exception,
+          err:
+            /max requests limit exceeded|ReplyError/i.test(errMessage)
+              ? { type: 'RedisError', message: errMessage.split('\n')[0] }
+              : exception instanceof Error
+                ? { type: exception.name, message: exception.message }
+                : { type: 'Unknown', message: errMessage.slice(0, 200) },
           path: request.url,
           requestId: request.id,
         },

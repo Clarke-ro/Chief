@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { Bell, ChevronRight, Inbox, Search as SearchIcon } from 'lucide-react-native';
+import { Bell, ChevronRight, Inbox, RefreshCw, Search as SearchIcon } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Platform,
   Pressable,
   RefreshControl,
@@ -199,7 +200,7 @@ export function HomeScreen() {
     const data = freshnessQuery.data;
     if (!data) return null;
     if (data.syncing) return 'Syncing…';
-    if (data.failed) return 'Sync issue — pull to retry';
+    if (data.failed) return 'Sync issue — tap Sync to retry';
     return formatSyncAge(data.lastSyncedAt);
   }, [freshnessQuery.data]);
 
@@ -261,12 +262,19 @@ export function HomeScreen() {
           const id = await ensureActiveWorkspaceId();
           if (mounted.current) setWorkspaceId(id);
           await syncRepository.runFirstConnection(id);
+          // Inline sync returns when providers finish; give compose a beat, then reload.
+          await new Promise((r) => setTimeout(r, 400));
         } catch {
           // Brief refresh still runs with whatever is already persisted.
         }
       }
       await refreshBrief();
       await Promise.all([freshnessQuery.refetch(), unreadQuery.refetch()]);
+      // Second pass if sync was still writing when the first brief landed empty.
+      if (env.liveHomeBrief && hasSession) {
+        await new Promise((r) => setTimeout(r, 1200));
+        if (mounted.current) await refreshBrief();
+      }
     } finally {
       if (mounted.current) setRefreshing(false);
     }
@@ -290,13 +298,16 @@ export function HomeScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         removeClippedSubviews={Platform.OS === 'android'}
+        // Pull-to-refresh is unreliable on web PWA — use the Sync button instead.
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.accent}
-            colors={[colors.accent]}
-          />
+          Platform.OS === 'web' ? undefined : (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.accent}
+              colors={[colors.accent]}
+            />
+          )
         }
       >
         <View style={styles.viewport} collapsable={false}>
@@ -308,6 +319,29 @@ export function HomeScreen() {
                 freshnessLabel={env.liveHomeBrief ? freshnessLabel : null}
                 actions={
                   <>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Sync and refresh brief"
+                      accessibilityState={{ busy: refreshing }}
+                      hitSlop={8}
+                      disabled={refreshing}
+                      onPress={() => {
+                        void onRefresh();
+                      }}
+                      style={({ pressed }) => [
+                        styles.iconBtn,
+                        {
+                          backgroundColor: colors.bgElevated,
+                          opacity: pressed || refreshing ? 0.7 : 1,
+                        },
+                      ]}
+                    >
+                      {refreshing ? (
+                        <ActivityIndicator size="small" color={colors.accent} />
+                      ) : (
+                        <RefreshCw size={20} color={colors.text} strokeWidth={2} />
+                      )}
+                    </Pressable>
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Search"
@@ -393,7 +427,7 @@ export function HomeScreen() {
                   title="No priorities yet"
                   description={
                     env.liveHomeBrief
-                      ? 'Connect Google, Slack, GitHub, or Notion — then pull to refresh once sync lands.'
+                      ? 'Connect Google, Slack, GitHub, or Notion — then tap Sync once data lands.'
                       : 'Your focus list will show up here.'
                   }
                   actionLabel={env.liveHomeBrief ? 'Open Profile' : undefined}
@@ -514,7 +548,7 @@ export function HomeScreen() {
                   title="Brief is quiet"
                   description={
                     env.liveHomeBrief
-                      ? 'Priorities already cover the urgent work — or pull to refresh after sync for more context.'
+                      ? 'Priorities already cover the urgent work — or tap Sync after connecting apps for more context.'
                       : 'Briefing signals will show up here.'
                   }
                 />

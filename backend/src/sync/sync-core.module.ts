@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BriefingModule } from '../briefing/briefing.module';
 import { BullMqRootModule } from '../common/bullmq/bullmq.module';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { SyncFetcherRegistry } from './fetch/sync-fetcher.registry';
@@ -20,7 +21,7 @@ import { SlackMessagesFetcher } from './providers/slack/slack-messages.fetcher';
  * Imported by HTTP SyncModule (produce jobs) and WorkerModule (consume jobs).
  */
 @Module({
-  imports: [BullMqRootModule, IntegrationsModule],
+  imports: [BullMqRootModule, IntegrationsModule, BriefingModule],
   providers: [
     GoogleGmailFetcher,
     GoogleCalendarFetcher,

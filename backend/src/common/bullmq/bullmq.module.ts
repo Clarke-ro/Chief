@@ -1,7 +1,8 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Global, Module } from '@nestjs/common';
-import { AppConfigService } from '../config/app-config.service';
 import { Queues } from '../constants/queues';
+import { REDIS_RESOLVED_URL } from '../redis/redis.constants';
+import { RedisModule } from '../redis/redis.module';
 import { DEFAULT_JOB_OPTIONS } from './job-options';
 import { QueueService } from './queue.service';
 
@@ -19,14 +20,16 @@ function redisConnectionFromUrl(url: string) {
  * Registers BullMQ connection + named queues.
  * API process: producers via QueueService.
  * Worker process: processors in WorkerModule.
+ * Uses the same resolved Redis URL as RedisModule (primary → fallbacks).
  */
 @Global()
 @Module({
   imports: [
+    RedisModule,
     BullModule.forRootAsync({
-      inject: [AppConfigService],
-      useFactory: (config: AppConfigService) => ({
-        connection: redisConnectionFromUrl(config.redisUrl),
+      inject: [REDIS_RESOLVED_URL],
+      useFactory: (redisUrl: string) => ({
+        connection: redisConnectionFromUrl(redisUrl),
         defaultJobOptions: DEFAULT_JOB_OPTIONS,
       }),
     }),

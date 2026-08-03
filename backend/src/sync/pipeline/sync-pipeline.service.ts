@@ -4,6 +4,7 @@ import {
   SyncResource,
   SyncRunStatus,
 } from '@prisma/client';
+import { BriefingService } from '../../briefing/briefing.service';
 import { QueueService } from '../../common/bullmq/queue.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AccessTokenService } from '../../integrations/tokens/access-token.service';
@@ -25,6 +26,7 @@ export class SyncPipelineService {
     private readonly fetchers: SyncFetcherRegistry,
     private readonly persist: SyncPersistService,
     private readonly queues: QueueService,
+    private readonly briefing: BriefingService,
   ) {}
 
   async runResourceJob(input: {
@@ -142,8 +144,22 @@ export class SyncPipelineService {
             workspaceId: account.workspaceId,
             err: error instanceof Error ? error.message : String(error),
           },
-          'Failed to enqueue briefing after sync',
+          'Failed to enqueue briefing after sync — composing inline',
         );
+        try {
+          await this.briefing.generateForWorkspace(account.workspaceId);
+        } catch (briefError) {
+          this.logger.warn(
+            {
+              workspaceId: account.workspaceId,
+              err:
+                briefError instanceof Error
+                  ? briefError.message
+                  : String(briefError),
+            },
+            'Inline briefing after sync failed',
+          );
+        }
       }
 
       return {

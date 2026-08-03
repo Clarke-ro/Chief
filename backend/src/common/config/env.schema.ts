@@ -10,7 +10,11 @@ export const envSchema = z.object({
   CORS_ORIGINS: z.string().default('http://localhost:8081'),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  /** Primary Upstash / Redis TCP URL (rediss:// for TLS). */
   REDIS_URL: z.string().min(1, 'REDIS_URL is required'),
+  /** Optional fallbacks when primary is quota-exhausted or unreachable. */
+  REDIS_URL1: z.string().optional().default(''),
+  REDIS_URL2: z.string().optional().default(''),
 
   BETTER_AUTH_SECRET: z
     .string()

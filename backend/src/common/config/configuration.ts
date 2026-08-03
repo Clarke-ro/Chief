@@ -1,5 +1,6 @@
 import type { Env } from './env.schema';
 import { resolvePublicBaseUrl } from './env.schema';
+import { collectRedisUrls } from '../redis/redis-url.resolve';
 
 export type OAuthProviderCredentials = {
   clientId: string;
@@ -14,7 +15,9 @@ export type AppConfig = {
   apiPrefix: string;
   corsOrigins: string[];
   databaseUrl: string;
+  /** First working URL is chosen at boot from redisUrls. */
   redisUrl: string;
+  redisUrls: string[];
   betterAuth: {
     secret: string;
     url: string;
@@ -59,6 +62,7 @@ export function buildConfiguration(env: Env): AppConfig {
       .filter(Boolean),
     databaseUrl: env.DATABASE_URL,
     redisUrl: env.REDIS_URL,
+    redisUrls: collectRedisUrls(env.REDIS_URL, env.REDIS_URL1, env.REDIS_URL2),
     betterAuth: {
       secret: env.BETTER_AUTH_SECRET,
       url: publicBaseUrl,

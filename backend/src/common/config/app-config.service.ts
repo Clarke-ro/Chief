@@ -42,6 +42,11 @@ export class AppConfigService {
     return this.config.get('redisUrl', { infer: true });
   }
 
+  /** Primary + optional REDIS_URL1 / REDIS_URL2 (deduped). */
+  get redisUrls(): string[] {
+    return this.config.get('redisUrls', { infer: true });
+  }
+
   get betterAuth() {
     return this.config.get('betterAuth', { infer: true });
   }
