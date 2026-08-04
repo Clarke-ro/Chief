@@ -85,6 +85,28 @@ describe('briefing.conflicts', () => {
     expect(match!.overlapTokens.length).toBeGreaterThan(0);
   });
 
+  it('does not hitch a Vercel payment to an unrelated Railway update', () => {
+    const match = findRelatedPriority(
+      {
+        title: '$41.78 payment to Vercel Inc. was unsuccessful',
+        snippet: 'Update your payment method',
+        fromAddress: 'noreply@vercel.com',
+      },
+      [
+        {
+          id: 'p1',
+          title: 'Check the latest update from Railway',
+          reason: 'Update from Railway',
+          priority: 'medium',
+          urgencyLabel: 'Follow up',
+          relevance: 0.6,
+          platform: 'gmail',
+        },
+      ],
+    );
+    expect(match).toBeNull();
+  });
+
   it('does not relate a generic unrecognized device login to unrelated work', () => {
     const match = findRelatedPriority(
       {

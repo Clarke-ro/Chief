@@ -195,7 +195,16 @@ export class ScheduleService {
     }
 
     const seen = new Set<string>();
+    const nowMs = Date.now();
     for (const event of events) {
+      // Don't keep finished blocks on Today's Schedule.
+      if (event.endsAt.getTime() < nowMs) {
+        const prevEnded = byEventId.get(event.id);
+        if (prevEnded) {
+          await this.prisma.scheduleItem.delete({ where: { id: prevEnded.id } });
+        }
+        continue;
+      }
       seen.add(event.id);
       const title = event.title.trim() || 'Calendar event';
       const subtitle = event.location?.trim() || 'Calendar';

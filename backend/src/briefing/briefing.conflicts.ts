@@ -147,6 +147,8 @@ export function significantTokens(text: string): Set<string> {
 /**
  * True when an alert shares meaningful tokens with a Top Priority
  * (brand, product, project name) — not merely "payment" / "login".
+ * Payment/billing alerts must share the vendor brand (e.g. Vercel↔Vercel),
+ * never a generic verb like "update" that can hitch to unrelated work.
  */
 export function findRelatedPriority(
   alert: {
@@ -157,9 +159,8 @@ export function findRelatedPriority(
   },
   priorities: PriorityRef[],
 ): RelatedAlertMatch | null {
-  const alertTokens = significantTokens(
-    `${alert.title} ${alert.snippet ?? ''} ${alert.bodyText ?? ''} ${alert.fromAddress ?? ''}`,
-  );
+  const alertBlob = `${alert.title} ${alert.snippet ?? ''} ${alert.bodyText ?? ''} ${alert.fromAddress ?? ''}`;
+  const alertTokens = significantTokens(alertBlob);
   const fromDomain = (alert.fromAddress ?? '')
     .toLowerCase()
     .split('@')[1]
@@ -183,7 +184,7 @@ export function findRelatedPriority(
   if (fromDomain && fromDomain.length >= 4 && !ignoreDomains.has(fromDomain)) {
     alertTokens.add(fromDomain);
   }
-  // Drop generic alert vocabulary so "payment" alone never matches.
+  // Drop generic alert vocabulary so "payment" / "update" alone never matches.
   for (const generic of [
     'payment',
     'invoice',
@@ -199,6 +200,7 @@ export function findRelatedPriority(
     'alert',
     'failed',
     'failure',
+    'unsuccessful',
     'unrecognized',
     'unrecognised',
     'charge',
@@ -214,15 +216,44 @@ export function findRelatedPriority(
     'chrome',
     'safari',
     'firefox',
+    'update',
+    'latest',
+    'check',
+    'required',
+    'action',
+    'method',
+    'card',
+    'credit',
+    'debit',
+    'amount',
+    'dollars',
+    'please',
   ]) {
     alertTokens.delete(generic);
   }
   if (alertTokens.size === 0 || priorities.length === 0) return null;
 
+  const paymentLike =
+    /\b(payment|invoice|billing|charge|declined|past due|subscription)\b/i.test(
+      alertBlob,
+    ) || Boolean(fromDomain && !ignoreDomains.has(fromDomain));
+
+  // Billing vendors must appear on the priority (Vercel payment ≠ Railway update).
+  let candidates = priorities;
+  if (paymentLike && fromDomain && !ignoreDomains.has(fromDomain)) {
+    const branded = priorities.filter((priority) => {
+      const blob = `${priority.title} ${priority.reason} ${priority.platform ?? ''}`.toLowerCase();
+      const tokens = significantTokens(blob);
+      return tokens.has(fromDomain) || blob.includes(fromDomain);
+    });
+    if (branded.length === 0) return null;
+    candidates = branded;
+  }
+
   let best: RelatedAlertMatch | null = null;
   let bestScore = 0;
 
-  for (const priority of priorities) {
+  for (const priority of candidates) {
     const priorityTokens = significantTokens(
       `${priority.title} ${priority.reason} ${priority.platform ?? ''}`,
     );
@@ -230,18 +261,26 @@ export function findRelatedPriority(
     for (const token of alertTokens) {
       if (priorityTokens.has(token)) overlap.push(token);
     }
+    // Require 2+ tokens, or one strong brand (≥6) that isn't a weak verb.
+    const strong = overlap.filter((t) => t.length >= 6);
+    if (overlap.length < 2 && strong.length === 0) continue;
+    if (overlap.length === 1 && strong.length === 1 && paymentLike) {
+      // Single brand token OK only when it is the vendor domain.
+      if (fromDomain && strong[0] !== fromDomain && !strong[0].includes(fromDomain)) {
+        continue;
+      }
+    }
     const score =
       overlap.length +
-      overlap.filter((t) => t.length >= 6).length * 0.5;
-    if (overlap.length >= 2 || overlap.some((t) => t.length >= 5)) {
-      if (score > bestScore) {
-        bestScore = score;
-        best = {
-          alertId: '',
-          priority,
-          overlapTokens: overlap,
-        };
-      }
+      strong.length * 0.5 +
+      (fromDomain && overlap.includes(fromDomain) ? 2 : 0);
+    if (score > bestScore) {
+      bestScore = score;
+      best = {
+        alertId: '',
+        priority,
+        overlapTokens: overlap,
+      };
     }
   }
 

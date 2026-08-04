@@ -103,12 +103,60 @@ export function isLowValueMail(input: ScoredText): boolean {
 
 /** Collapse Focus/Brief titles so the same work item isn’t listed twice. */
 export function normalizeFocusTitleKey(title: string): string {
-  return title
+  let key = title
     .toLowerCase()
     .replace(/^(re|fw|fwd):\s*/gi, '')
     .replace(/[“”"']/g, '')
+    .replace(
+      /\b(today|tomorrow|tonight|overdue|this week|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi,
+      ' ',
+    )
+    .replace(/\b\d{1,2}:\d{2}\s*(am|pm)?\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+  // Build Week / hackathon emails synthesize near-identical headlines with
+  // different Career vs Deadline framing — collapse to one Focus card.
+  if (/\bbuild\s*week\b/.test(key) || /\bhackathon\b/.test(key) || /\bdevpost\b/.test(key)) {
+    return 'build-week-submission';
+  }
+  return key;
+}
+
+/**
+ * Past due work should leave Top Priorities (and not keep nagging on Schedule).
+ * Grace: still show through end of due day + 6h, then drop.
+ */
+export function isPastDeadlineWork(input: {
+  title: string;
+  snippet?: string | null;
+  bodyText?: string | null;
+  dueAt?: Date | null;
+  receivedAt?: Date | null;
+  now?: Date;
+}): boolean {
+  const now = input.now ?? new Date();
+  const blob = `${input.title} ${input.snippet ?? ''} ${input.bodyText ?? ''}`;
+  if (
+    /\b(deadline (has )?passed|submission (is )?closed|too late to submit|after the deadline)\b/i.test(
+      blob,
+    )
+  ) {
+    return true;
+  }
+  if (input.dueAt) {
+    const endOfDueDay = new Date(input.dueAt);
+    endOfDueDay.setHours(23, 59, 59, 999);
+    const graceMs = 6 * 60 * 60 * 1000;
+    if (now.getTime() > endOfDueDay.getTime() + graceMs) return true;
+  }
+  const isTimedEvent =
+    /\bbuild\s*week\b|\bhackathon\b|\bdevpost\b|\bsubmission\b/i.test(blob);
+  // Stale Build Week / hackathon reminders without a live due date.
+  if (isTimedEvent && !input.dueAt && input.receivedAt) {
+    const ageMs = now.getTime() - input.receivedAt.getTime();
+    if (ageMs > 2 * 24 * 60 * 60 * 1000) return true;
+  }
+  return false;
 }
 
 /**
@@ -477,9 +525,8 @@ export function synthesizeFocusNarrative(input: SynthesisInput): FocusNarrative 
     bullets.push('List 2–3 outcomes before you join');
     if (facts.location) bullets.push(`Location: ${facts.location}`);
   } else if (/\bbuild\s*week\b/i.test(blob) || /\bhackathon\b/i.test(blob) || /\bdevpost\b/i.test(blob)) {
-    headline = deadlineHint
-      ? `Submit your Build Week project before the deadline ${deadlineHint === 'Today' ? 'today' : deadlineHint}`
-      : 'Submit your Build Week project before the deadline';
+    // Keep headline stable so Career vs Deadline emails dedupe to one Focus card.
+    headline = 'Submit your Build Week project before the deadline';
     aboutTitle = 'Build Week deadline';
     aboutBody =
       'Your OpenAI / Devpost Build Week submission is time-sensitive. Late uploads risk missing judging or demo slots.';

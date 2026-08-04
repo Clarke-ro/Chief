@@ -155,12 +155,20 @@ export function HomeScreen() {
   const dedupedFocus = useMemo(() => {
     const seen = new Set<string>();
     return brief.focus.filter((item) => {
-      const key = item.title
+      let key = item.title
         .toLowerCase()
         .replace(/^(re|fw|fwd):\s*/gi, '')
         .replace(/[“”"']/g, '')
+        .replace(
+          /\b(today|tomorrow|tonight|overdue|this week|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi,
+          ' ',
+        )
+        .replace(/\b\d{1,2}:\d{2}\s*(am|pm)?\b/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
+      if (/\bbuild\s*week\b|\bhackathon\b|\bdevpost\b/.test(key)) {
+        key = 'build-week-submission';
+      }
       if (!key || seen.has(key)) return false;
       seen.add(key);
       return true;

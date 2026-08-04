@@ -37,6 +37,7 @@ import {
   isFocusEligible,
   isLowValueMail,
   isNoiseLoginOrDeviceAlert,
+  isPastDeadlineWork,
   normalizeFocusTitleKey,
   RELEVANCE_THRESHOLDS,
   scoreEmail,
@@ -409,6 +410,17 @@ export class BriefingService {
       const id = task.id;
       if (dismissed.has(id)) continue;
       if (
+        isPastDeadlineWork({
+          title: task.title,
+          snippet: task.description,
+          bodyText: task.details,
+          dueAt: task.dueAt,
+          now,
+        })
+      ) {
+        continue;
+      }
+      if (
         !isActionableTodo({
           title: task.title,
           description: task.description,
@@ -457,6 +469,18 @@ export class BriefingService {
           fromAddress: email.fromAddress,
           fromName: email.fromName,
           labelIds: email.labelIds,
+        })
+      ) {
+        continue;
+      }
+
+      if (
+        isPastDeadlineWork({
+          title: email.subject ?? '',
+          snippet: email.snippet,
+          bodyText: email.bodyText,
+          receivedAt: email.receivedAt,
+          now,
         })
       ) {
         continue;
@@ -1172,6 +1196,31 @@ function needsPresentationRefresh(brief: HomeBriefDto): boolean {
     normalizeFocusTitleKey(item.title),
   );
   if (new Set(focusTitleKeys).size < focusTitleKeys.length) {
+    return true;
+  }
+  // Mismatched related payment (e.g. Vercel body under Railway title).
+  if (
+    brief.focus.some((item) => {
+      if (item.urgencyLabel !== 'Related risk') return false;
+      const title = item.title.toLowerCase();
+      const reason = `${item.reason} ${item.aboutBody}`.toLowerCase();
+      if (title.includes('railway') && reason.includes('vercel')) return true;
+      if (title.includes('vercel') && reason.includes('railway')) return true;
+      return false;
+    })
+  ) {
+    return true;
+  }
+  // Stale Build Week / overdue deadline copy still on Focus.
+  if (
+    brief.focus.some(
+      (item) =>
+        /build\s*week/i.test(item.title) &&
+        /\b(overdue|deadline:\s*overdue)\b/i.test(
+          `${item.reason} ${item.aboutBody}`,
+        ),
+    )
+  ) {
     return true;
   }
   // Duplicate Pay actions on invoice cards.
