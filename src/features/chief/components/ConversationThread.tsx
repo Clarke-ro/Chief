@@ -70,9 +70,9 @@ const ChiefTurn = memo(function ChiefTurn({ turn, onAction }: TurnProps) {
       ) : null}
 
       {tasks.length > 0 ? (
-        <View style={styles.actions} collapsable={false}>
+        <View style={styles.actions} collapsable={false} pointerEvents="box-none">
           <Text style={[styles.actionsLead, { color: colors.textSecondary }]}>{lead}</Text>
-          <View style={styles.actionRow} collapsable={false}>
+          <View style={styles.actionRow} collapsable={false} pointerEvents="box-none">
             {tasks.map((task) => (
               <ActionableTaskCard
                 key={task.id}

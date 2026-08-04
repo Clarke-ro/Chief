@@ -33,8 +33,11 @@ import {
   classifyWorkKind,
   contextualOpenLabel,
   estimatedMinutesFor,
+  isActionableTodo,
   isFocusEligible,
+  isLowValueMail,
   isNoiseLoginOrDeviceAlert,
+  normalizeFocusTitleKey,
   RELEVANCE_THRESHOLDS,
   scoreEmail,
   scoreTask,
@@ -405,6 +408,17 @@ export class BriefingService {
     for (const task of tasks) {
       const id = task.id;
       if (dismissed.has(id)) continue;
+      if (
+        !isActionableTodo({
+          title: task.title,
+          description: task.description,
+          priority: task.priority,
+          dueAt: task.dueAt,
+          now,
+        })
+      ) {
+        continue;
+      }
       const relevance = scoreTask({
         title: task.title,
         description: task.description,
@@ -430,6 +444,20 @@ export class BriefingService {
           email.snippet,
           email.bodyText,
         )
+      ) {
+        continue;
+      }
+
+      // Hard-drop promos / social / ecommerce — do not rely on score alone.
+      if (
+        isLowValueMail({
+          subject: email.subject,
+          snippet: email.snippet,
+          bodyText: email.bodyText,
+          fromAddress: email.fromAddress,
+          fromName: email.fromName,
+          labelIds: email.labelIds,
+        })
       ) {
         continue;
       }
@@ -495,11 +523,21 @@ export class BriefingService {
       if (dismissed.has(id)) continue;
       const summary = msg.summary?.trim();
       if (!summary) continue;
+      const title = msg.title || 'Slack';
+      if (
+        isLowValueMail({
+          subject: title,
+          snippet: summary,
+          fromAddress: 'slack@slack.com',
+        })
+      ) {
+        continue;
+      }
       briefingCandidates.push({
         id,
         platform: 'slack',
         section: 'Needs Attention',
-        title: msg.title || 'Slack',
+        title,
         summary: summary.length > 160 ? `${summary.slice(0, 157)}…` : summary,
         timestamp: 'Recently',
         relevance: 0.62,
@@ -509,6 +547,8 @@ export class BriefingService {
     // Calendar stays on Schedule. Focus only gets derived conflict cards later.
 
     rankedFocus.sort((a, b) => b.relevance - a.relevance);
+    // Same synthesized headline (e.g. Build Week) from task + emails → keep strongest.
+    const dedupedRankedFocus = dedupeByFocusTitle(rankedFocus);
     briefingCandidates.sort((a, b) => {
       if (b.relevance !== a.relevance) return b.relevance - a.relevance;
       return sectionRank(a.section) - sectionRank(b.section);
@@ -517,7 +557,7 @@ export class BriefingService {
     const { focus: plannedFocus, plannerNotes } = this.applyPlannerToFocus(
       workspaceId,
       knowledge,
-      rankedFocus,
+      dedupedRankedFocus,
     );
 
     const priorityRefs: PriorityRef[] = plannedFocus.map((item) => ({
@@ -526,7 +566,7 @@ export class BriefingService {
       reason: item.reason,
       priority: item.priority,
       urgencyLabel: item.urgencyLabel,
-      relevance: rankedFocus.find((r) => r.id === item.id)?.relevance ?? 0.7,
+      relevance: dedupedRankedFocus.find((r) => r.id === item.id)?.relevance ?? 0.7,
       platform: item.platform,
     }));
 
@@ -552,6 +592,8 @@ export class BriefingService {
       });
     }
 
+    // One related security/payment card per Top Priority (not one per matching email).
+    const relatedPrioritySeen = new Set<string>();
     for (const alert of deferredAlerts) {
       if (
         isNoiseLoginOrDeviceAlert(
@@ -572,7 +614,9 @@ export class BriefingService {
         priorityRefs,
       );
       if (!related) continue;
+      if (relatedPrioritySeen.has(related.priority.id)) continue;
       if (dismissed.has(`related-${alert.email.id}`)) continue;
+      relatedPrioritySeen.add(related.priority.id);
 
       // Related payment/account risk → Focus only (not a Brief spam section).
       derivedFocus.push({
@@ -581,16 +625,23 @@ export class BriefingService {
       });
     }
 
-    const focus = [...derivedFocus, ...plannedFocus.map((item) => ({
-      ...item,
-      relevance: rankedFocus.find((r) => r.id === item.id)?.relevance ?? 0.7,
-    }))]
+    const focus = dedupeByFocusTitle([
+      ...derivedFocus,
+      ...plannedFocus.map((item) => ({
+        ...item,
+        relevance:
+          dedupedRankedFocus.find((r) => r.id === item.id)?.relevance ?? 0.7,
+      })),
+    ])
       .sort((a, b) => b.relevance - a.relevance)
       .slice(0, FOCUS_ITEM_LIMIT)
       .map(({ relevance: _r, ...item }) => item);
 
     // Never resurface a Top Priority item again in Today's Brief.
     const focusKeys = new Set(focus.map((item) => item.id));
+    const focusTitleKeys = new Set(
+      focus.map((item) => normalizeFocusTitleKey(item.title)),
+    );
     const briefing: BriefingSignalDto[] = capBriefingSignals(
       briefingCandidates
         .filter((candidate) => {
@@ -598,6 +649,9 @@ export class BriefingService {
           if (focusKeys.has(`mail-${candidate.id}`)) return false;
           if (focusKeys.has(`event-${candidate.id}`)) return false;
           if (focusKeys.has(`related-${candidate.id}`)) return false;
+          if (focusTitleKeys.has(normalizeFocusTitleKey(candidate.title))) {
+            return false;
+          }
           return true;
         })
         .sort((a, b) => b.relevance - a.relevance)
@@ -1113,6 +1167,33 @@ function needsPresentationRefresh(brief: HomeBriefDto): boolean {
   ) {
     return true;
   }
+  // Duplicate Focus titles (Build Week ×N, payment risk ×N) → recompose.
+  const focusTitleKeys = brief.focus.map((item) =>
+    normalizeFocusTitleKey(item.title),
+  );
+  if (new Set(focusTitleKeys).size < focusTitleKeys.length) {
+    return true;
+  }
+  // Duplicate Pay actions on invoice cards.
+  if (
+    brief.focus.some((item) => {
+      const payLabels = item.actions.filter((a) => /^pay$/i.test(a.label));
+      return payLabels.length > 1;
+    })
+  ) {
+    return true;
+  }
+  // Promo / social noise still sitting in Brief.
+  if (
+    brief.briefing.some((signal) =>
+      isLowValueMail({
+        subject: signal.title,
+        snippet: signal.summary,
+      }),
+    )
+  ) {
+    return true;
+  }
   if (
     brief.focus.some(
       (item) =>
@@ -1481,6 +1562,42 @@ function sectionRank(section?: string | null): number {
   if (!section) return BRIEF_SECTION_ORDER.length;
   const index = BRIEF_SECTION_ORDER.indexOf(section as BriefSection);
   return index === -1 ? BRIEF_SECTION_ORDER.length : index;
+}
+
+/**
+ * Prefer tasks over mail/related cards when synthesized headlines collide
+ * (e.g. multiple Build Week reminders sharing one title).
+ */
+function dedupeByFocusTitle<T extends { id: string; title: string; relevance: number }>(
+  items: T[],
+): T[] {
+  const sourceRank = (id: string) => {
+    if (id.startsWith('conflict-')) return 0;
+    if (id.startsWith('related-')) return 1;
+    if (id.startsWith('mail-') || id.startsWith('event-') || id.startsWith('slack-')) {
+      return 3;
+    }
+    return 2; // tasks / native ids
+  };
+
+  const best = new Map<string, T>();
+  for (const item of items) {
+    const key = normalizeFocusTitleKey(item.title);
+    if (!key) continue;
+    const existing = best.get(key);
+    if (!existing) {
+      best.set(key, item);
+      continue;
+    }
+    const betterRelevance = item.relevance > existing.relevance + 0.02;
+    const betterSource =
+      Math.abs(item.relevance - existing.relevance) <= 0.02 &&
+      sourceRank(item.id) < sourceRank(existing.id);
+    if (betterRelevance || betterSource) {
+      best.set(key, item);
+    }
+  }
+  return [...best.values()];
 }
 
 /** Cap noisy Brief sections so Security/Finance/Calendar don't drown work context. */

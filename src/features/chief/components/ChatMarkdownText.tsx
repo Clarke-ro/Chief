@@ -1,6 +1,7 @@
 import { Fragment, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { stripMathDelimiters } from '@/features/chief/parseChiefReply';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { chatTypography, fontFamily, spacing } from '@/theme';
 
@@ -15,7 +16,10 @@ type Segment =
 /** Lightweight markdown: paragraphs, **bold**, and `-` bullets (nested via indent). */
 export function ChatMarkdownText({ content }: ChatMarkdownTextProps) {
   const colors = useThemeColors();
-  const segments = useMemo(() => parseSegments(content), [content]);
+  const segments = useMemo(
+    () => parseSegments(stripMathDelimiters(content)),
+    [content],
+  );
 
   return (
     <View style={styles.wrap}>

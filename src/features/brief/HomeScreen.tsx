@@ -126,28 +126,60 @@ export function HomeScreen() {
   }, [brief.userName, me?.user.name]);
   const briefingGroups = useMemo(() => {
     const focusIds = new Set(brief.focus.map((item) => item.id));
-    const unique = brief.briefing.filter(
-      (signal) =>
-        !focusIds.has(signal.id) &&
-        !focusIds.has(`mail-${signal.id}`) &&
-        !focusIds.has(`event-${signal.id}`),
+    const focusTitles = new Set(
+      brief.focus.map((item) =>
+        item.title
+          .toLowerCase()
+          .replace(/^(re|fw|fwd):\s*/gi, '')
+          .replace(/[“”"']/g, '')
+          .replace(/\s+/g, ' ')
+          .trim(),
+      ),
     );
+    const unique = brief.briefing.filter((signal) => {
+      if (focusIds.has(signal.id)) return false;
+      if (focusIds.has(`mail-${signal.id}`)) return false;
+      if (focusIds.has(`event-${signal.id}`)) return false;
+      const titleKey = signal.title
+        .toLowerCase()
+        .replace(/^(re|fw|fwd):\s*/gi, '')
+        .replace(/[“”"']/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (focusTitles.has(titleKey)) return false;
+      return true;
+    });
     return groupByBriefSection(unique);
   }, [brief.briefing, brief.focus]);
 
+  const dedupedFocus = useMemo(() => {
+    const seen = new Set<string>();
+    return brief.focus.filter((item) => {
+      const key = item.title
+        .toLowerCase()
+        .replace(/^(re|fw|fwd):\s*/gi, '')
+        .replace(/[“”"']/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [brief.focus]);
+
   const visibleFocus = useMemo(() => {
-    if (focusExpanded || brief.focus.length <= FOCUS_PREVIEW_COUNT) {
-      return brief.focus;
+    if (focusExpanded || dedupedFocus.length <= FOCUS_PREVIEW_COUNT) {
+      return dedupedFocus;
     }
-    return brief.focus.slice(0, FOCUS_PREVIEW_COUNT);
-  }, [brief.focus, focusExpanded]);
-  const hiddenFocusCount = Math.max(0, brief.focus.length - FOCUS_PREVIEW_COUNT);
+    return dedupedFocus.slice(0, FOCUS_PREVIEW_COUNT);
+  }, [dedupedFocus, focusExpanded]);
+  const hiddenFocusCount = Math.max(0, dedupedFocus.length - FOCUS_PREVIEW_COUNT);
 
   useEffect(() => {
-    if (brief.focus.length <= FOCUS_PREVIEW_COUNT) {
+    if (dedupedFocus.length <= FOCUS_PREVIEW_COUNT) {
       setFocusExpanded(false);
     }
-  }, [brief.focus.length]);
+  }, [dedupedFocus.length]);
 
   const kickedSync = useRef(false);
   const kickedPush = useRef(false);

@@ -23,6 +23,7 @@ import { ChiefComposer } from '@/features/chief/components/ChiefComposer';
 import { ChiefHeader } from '@/features/chief/components/ChiefHeader';
 import { ConversationThread } from '@/features/chief/components/ConversationThread';
 import { HistoryDrawer } from '@/features/chief/components/HistoryDrawer';
+import { parseChiefReply } from '@/features/chief/parseChiefReply';
 import type { ConversationTurn } from '@/features/chief/types';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { ApiError, ApiNetworkError } from '@/services/api/client';
@@ -172,10 +173,13 @@ export function ChiefScreen() {
             streamed.trim() ||
             'I need a bit more context to help with that.';
           if (!started) setThinking(false);
+          const parsed = parseChiefReply(finalContent);
           upsertChiefReply({
             id: chiefId,
             role: 'chief',
-            content: finalContent,
+            content: parsed.content,
+            actionsLead: parsed.actions?.length ? 'Next steps' : undefined,
+            actions: parsed.actions,
           });
           scrollThreadToEnd();
         } catch (error) {
@@ -188,12 +192,16 @@ export function ChiefScreen() {
               : error instanceof ApiNetworkError
                 ? error.message
                 : 'Something went wrong.';
+          const fallback = streamed.trim()
+            ? streamed
+            : `${detail} I couldn't finish this reply with your live workspace context.`;
+          const parsed = parseChiefReply(fallback);
           upsertChiefReply({
             id: chiefId,
             role: 'chief',
-            content: streamed.trim()
-              ? streamed
-              : `${detail} I couldn't finish this reply with your live workspace context.`,
+            content: parsed.content,
+            actionsLead: parsed.actions?.length ? 'Next steps' : undefined,
+            actions: parsed.actions,
           });
           scrollThreadToEnd();
         } finally {
@@ -332,13 +340,11 @@ export function ChiefScreen() {
                 showsVerticalScrollIndicator={false}
                 removeClippedSubviews={Platform.OS === 'android'}
               >
-                <Pressable onPress={dismissKeyboard} accessible={false}>
-                  <ConversationThread
-                    turns={activeSession.turns}
-                    onAction={onAction}
-                    thinking={thinking}
-                  />
-                </Pressable>
+                <ConversationThread
+                  turns={activeSession.turns}
+                  onAction={onAction}
+                  thinking={thinking}
+                />
               </ScrollView>
 
               <View

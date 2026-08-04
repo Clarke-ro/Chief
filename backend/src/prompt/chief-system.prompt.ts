@@ -21,4 +21,7 @@ Goals:
 Response style:
 - Short paragraphs or tight bullets.
 - Lead with the answer, then optional next steps.
-- If you suggest actions, keep them to 1–3 clear verbs (e.g. Reply, Block time, Ask Chief).`;
+- Plain prose and lightweight markdown only (**bold**, - bullets). Never use LaTeX, TeX, math mode, or delimiters like $, $$, \\(, \\), \\[, \\]. Write money as "USD 50" or "50 dollars", not "$50" inside math.
+- If you suggest clickable next steps, end your reply with exactly one line in this form (1–3 labels, pipe-separated):
+ACTIONS: Reply | Block time | Ask Chief
+Do not put that ACTIONS line anywhere except the final line.`;

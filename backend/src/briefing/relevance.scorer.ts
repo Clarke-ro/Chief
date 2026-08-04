@@ -40,7 +40,11 @@ const PROMO_LABELS = new Set([
 ]);
 
 const PROMO_PATTERNS =
-  /\b(unsubscribe|newsletter|promo(tion)?s?|% off|sale|deal|discount|free shipping|limited time|click here|noreply|no-reply|marketing|digest|weekly roundup|xiaomi|maths?\s*tutor|tutoring|win a |giveaway|coupon)\b/i;
+  /\b(unsubscribe|newsletter|promo(tion)?s?|% off|sale|deal|discount|free shipping|limited time|click here|noreply|no-reply|marketing|digest|weekly roundup|xiaomi|maths?\s*tutor|tutoring|win a |giveaway|coupon|in stock now|flash sale|shop now|buy now|new arrivals|just dropped|snapchat|spotlight|memories are waiting|your story|streak|new opportunities|recommended for you|discover more|you might like)\b/i;
+
+/** Social / shop / promo senders that rarely deserve Home. */
+const LOW_VALUE_FROM =
+  /\b(snapchat\.com|snap\.com|mail\.alibaba\.com|aliexpress\.|shopify\.|marketing\.|promo\.|deals\.|newsletter\.|noreply\.|no-reply\.|notifications?@|updates@|news@|store@|offers@)\b/i;
 
 const HIGH_VALUE_PATTERNS =
   /\b(deadline|due\s*(by|on|date)?|hackathon|build\s*week|interview|invoice|payment|payroll|billing|approve|approval|action\s*required|security|password|verify|2fa|mfa|urgent|asap|rsvp|meeting|standup|demo|proposal|contract|offer\s*letter|wire|receipt|refund|tax|irs|bank|statement|purchase\s*order|po\s*#|pull\s*request|code\s*review|ship|launch|milestone|assessment|coding\s*challenge)\b/i;
@@ -65,11 +69,11 @@ const MEETING_LIKE =
 const NON_MEETING_CALENDAR =
   /\b(focus time|hold|blocked|busy|ooo|out of office|travel|flight|doctor|dentist|appointment|holiday|pto|vacation|birthday|reminder)\b/i;
 
-/** Hard-reject promotional / low-signal mail. */
+/** Hard-reject promotional / social / ecommerce noise. */
 export function isLowValueMail(input: ScoredText): boolean {
   const labels = input.labelIds ?? [];
   if (labels.some((l) => PROMO_LABELS.has(l))) return true;
-  const blob = `${input.subject ?? ''} ${input.snippet ?? ''} ${input.fromAddress ?? ''}`;
+  const blob = `${input.subject ?? ''} ${input.snippet ?? ''} ${input.fromAddress ?? ''} ${input.fromName ?? ''}`;
   if (PROMO_PATTERNS.test(blob)) return true;
   const from = (input.fromAddress ?? '').toLowerCase();
   if (
@@ -77,10 +81,55 @@ export function isLowValueMail(input: ScoredText): boolean {
     from.includes('no-reply') ||
     from.includes('newsletter') ||
     from.includes('marketing@') ||
-    from.includes('promo@')
+    from.includes('promo@') ||
+    LOW_VALUE_FROM.test(from)
   ) {
     return true;
   }
+  // Snapchat / social product mail without Gmail promo labels.
+  if (/\bsnap(chat)?\b/i.test(blob) && !ACTIONABLE_SECURITY.test(blob) && !ACTIONABLE_PAYMENT.test(blob)) {
+    return true;
+  }
+  // Ecommerce / marketplace promos (keep real invoices via ACTIONABLE_PAYMENT path elsewhere).
+  if (
+    /\b(alibaba|aliexpress|amazon\.|ebay\.|etsy\.|shopify|wish\.com|temu)\b/i.test(blob) &&
+    !ACTIONABLE_PAYMENT.test(blob) &&
+    !/\b(invoice|receipt|order\s*#|shipment|tracking|delivered)\b/i.test(blob)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Collapse Focus/Brief titles so the same work item isn’t listed twice. */
+export function normalizeFocusTitleKey(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/^(re|fw|fwd):\s*/gi, '')
+    .replace(/[“”"']/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Top Priorities = urgent deadlines / actionable todos (and related security/payment later).
+ * Drop undated low chores that only clear the score bar on medium priority.
+ */
+export function isActionableTodo(input: {
+  title: string;
+  description?: string | null;
+  priority: 'high' | 'medium' | 'low';
+  dueAt?: Date | null;
+  now?: Date;
+}): boolean {
+  const now = input.now ?? new Date();
+  const blob = `${input.title} ${input.description ?? ''}`;
+  if (input.priority === 'high') return true;
+  if (input.dueAt) {
+    const hoursUntil = (input.dueAt.getTime() - now.getTime()) / 3_600_000;
+    if (hoursUntil <= 72) return true;
+  }
+  if (HIGH_VALUE_PATTERNS.test(blob) || ACTION_VERBS.test(input.title)) return true;
   return false;
 }
 
@@ -945,7 +994,7 @@ export function contextualOpenLabel(workKind: WorkKind): string {
     case 'meeting':
       return 'Prepare';
     case 'invoice':
-      return 'Pay';
+      return 'Open billing';
     case 'email':
       return 'Reply';
     case 'security':
